@@ -6,7 +6,7 @@ __pycache__/
 .Python
 venv/
 /.venv/
-
+backend/venv-py311
 env.bak/
 venv.bak/
 build/
@@ -88,3 +88,7 @@ $RECYCLE.BIN/
 .DS_Store
 
 /КУРСОВАЯ РАБОТА_TXT ФАЙЛ.txt
+
+# Virtualenv
+venv-py311/
+/venv-py311
