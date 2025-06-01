@@ -58,6 +58,20 @@ export default function RoomsPage() {
     const matchesType = filterType ? room.room_type.name === filterType : true;
     
     return matchesSearch && matchesStatus && matchesType;
+  })
+  // Сортировка номеров по возрастанию
+  .sort((a, b) => {
+    // Извлекаем числовую часть из номера комнаты
+    const roomNumA = parseInt(a.room_number.replace(/\D/g, ''));
+    const roomNumB = parseInt(b.room_number.replace(/\D/g, ''));
+    
+    // Если оба номера корректно преобразованы в числа, сравниваем их
+    if (!isNaN(roomNumA) && !isNaN(roomNumB)) {
+      return roomNumA - roomNumB;
+    }
+    
+    // Иначе используем строковое сравнение
+    return a.room_number.localeCompare(b.room_number);
   });
   
   // Получение уникальных статусов и типов для фильтров
@@ -145,7 +159,7 @@ export default function RoomsPage() {
         <div className="flex gap-2">
           <div className="relative">
             <select
-              className="select pl-10 appearance-none pr-8"
+              className="select pl-10 appearance-none pr-8 min-w-[180px] w-[180px]"
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
             >
@@ -159,7 +173,7 @@ export default function RoomsPage() {
           
           <div className="relative">
             <select
-              className="select pl-10 appearance-none pr-8"
+              className="select pl-10 appearance-none pr-8 min-w-[180px] w-[180px]"
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
             >
