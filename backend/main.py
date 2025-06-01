@@ -44,14 +44,14 @@ create_default_hotel()
 # Создание приложения FastAPI
 app = FastAPI(title="InnControl API", description="API для системы администрирования гостиниц")
 
-# Настройка CORS - правильная конфигурация для работы с фронтендом
+# Настройка CORS для работы с фронтендом
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # URL фронтенда
-    allow_credentials=True,
+    allow_origins=["*"],  # Разрешаем запросы с любого источника
+    allow_credentials=False,  # Не используем credentials, чтобы разрешить '*' для origins
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["Content-Type", "Authorization", "Accept"],
-    expose_headers=["Content-Length"],
+    allow_headers=["*"],  # Разрешаем любые заголовки
+    expose_headers=["Content-Length", "Access-Control-Allow-Origin"],
     max_age=600,  # Время кеширования предзапросов (в секундах)
 )
 
@@ -233,19 +233,32 @@ def delete_client(client_id: int, db: Session = Depends(get_db)):
     if db_client is None:
         raise HTTPException(status_code=404, detail="Клиент не найден")
     
-    # Проверяем, есть ли у клиента активные бронирования
+    # Получаем все бронирования клиента
     client_bookings = crud.get_bookings_by_client(db, client_id=client_id)
-    active_bookings = [b for b in client_bookings if b.status in ["Активно", "Подтверждено"]]
     
-    if active_bookings:
-        raise HTTPException(
-            status_code=400, 
-            detail="Невозможно удалить клиента с активными бронированиями"
-        )
+    # Удаляем все бронирования клиента
+    for booking in client_bookings:
+        # Если номер был занят этим бронированием, обновляем его статус
+        room = crud.get_room(db, room_id=booking.room_id)
+        if room and room.status == "Занят":
+            # Проверяем, есть ли другие активные бронирования для этого номера
+            other_bookings = db.query(models.Booking).filter(
+                models.Booking.room_id == booking.room_id,
+                models.Booking.booking_id != booking.booking_id,
+                models.Booking.status.in_(["Активно", "Подтверждено"])
+            ).first()
+            
+            if not other_bookings:
+                room.status = "Свободен"
+                db.commit()
+        
+        # Удаляем бронирование
+        db.delete(booking)
     
     # Удаляем клиента
     db.delete(db_client)
     db.commit()
+    
     return db_client
 
 @app.get("/clients/city/{city}", response_model=List[schemas.Client])

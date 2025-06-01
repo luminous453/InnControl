@@ -611,7 +611,7 @@ export default function BookingsPage() {
                 <option value={0}>Выберите номер</option>
                 {availableRooms.map(room => (
                   <option key={room.room_id} value={room.room_id}>
-                    {room.room_number} (Этаж {room.floor})
+                    Номер {room.room_number} (Этаж {room.floor}, вместимость: {room.room_type?.capacity || "неизвестно"} чел.)
                   </option>
                 ))}
               </select>

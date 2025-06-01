@@ -88,7 +88,7 @@ export const dashboardService = {
   },
   
   // Получить последние бронирования
-  getRecentBookings: async (limit = 3): Promise<RecentBooking[]> => {
+  getRecentBookings: async (limit = 5): Promise<RecentBooking[]> => {
     try {
       console.log(`Получение последних ${limit} бронирований...`);
       
@@ -143,7 +143,7 @@ export const dashboardService = {
   },
   
   // Получить сегодняшние уборки
-  getTodayCleanings: async (limit = 3): Promise<RecentCleaning[]> => {
+  getTodayCleanings: async (limit = 5): Promise<RecentCleaning[]> => {
     try {
       console.log(`Получение ${limit} уборок на сегодня...`);
       
