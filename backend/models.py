@@ -1,8 +1,9 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Float, Date, DateTime, Enum
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Float, Date, DateTime, Enum, Time
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
 from database import Base
+from datetime import date
 
 # Перечисление для статуса номера
 class RoomStatus(str, enum.Enum):
@@ -131,7 +132,10 @@ class CleaningLog(Base):
     log_id = Column(Integer, primary_key=True, index=True)
     room_id = Column(Integer, ForeignKey("rooms.room_id"))
     employee_id = Column(Integer, ForeignKey("employees.employee_id"))
-    cleaning_date = Column(Date, default=func.current_date())
+    cleaning_date = Column(Date, default=date.today)
+    start_time = Column(Time, nullable=True)
+    end_time = Column(Time, nullable=True)
+    status = Column(String(50), default="Ожидает")
     
     # Отношения
     room = relationship("Room", back_populates="cleaning_logs")

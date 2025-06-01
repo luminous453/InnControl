@@ -10,7 +10,8 @@ import {
   FaUserTie, 
   FaBroom, 
   FaHistory, 
-  FaSignOutAlt 
+  FaSignOutAlt,
+  FaChartLine
 } from 'react-icons/fa';
 
 const Sidebar = () => {
@@ -55,6 +56,11 @@ const Sidebar = () => {
       name: 'Журнал уборок',
       path: '/dashboard/cleaning/logs',
       icon: <FaHistory className="w-5 h-5" />
+    },
+    {
+      name: 'Финансовые отчеты',
+      path: '/dashboard/reports',
+      icon: <FaChartLine className="w-5 h-5" />
     }
   ];
 

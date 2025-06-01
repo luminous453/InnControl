@@ -79,12 +79,68 @@ def read_room(room_id: int, db: Session = Depends(get_db)):
 def create_room(room: schemas.RoomCreate, db: Session = Depends(get_db)):
     return crud.create_room(db=db, room=room)
 
+@app.put("/rooms/{room_id}", response_model=schemas.Room)
+def update_room(room_id: int, room: schemas.RoomCreate, db: Session = Depends(get_db)):
+    db_room = crud.get_room(db, room_id=room_id)
+    if db_room is None:
+        raise HTTPException(status_code=404, detail="Номер не найден")
+    
+    # Обновляем поля номера
+    db_room.hotel_id = room.hotel_id
+    db_room.type_id = room.type_id
+    db_room.floor = room.floor
+    db_room.room_number = room.room_number
+    db_room.status = room.status
+    
+    db.commit()
+    db.refresh(db_room)
+    return db_room
+
+@app.put("/rooms/{room_id}/status", response_model=schemas.Room)
+def update_room_status_endpoint(room_id: int, status: schemas.RoomStatusUpdate, db: Session = Depends(get_db)):
+    db_room = crud.get_room(db, room_id=room_id)
+    if db_room is None:
+        raise HTTPException(status_code=404, detail="Номер не найден")
+    
+    db_room.status = status.status
+    db.commit()
+    db.refresh(db_room)
+    return db_room
+
+@app.delete("/rooms/{room_id}", response_model=schemas.Room)
+def delete_room(room_id: int, db: Session = Depends(get_db)):
+    db_room = crud.get_room(db, room_id=room_id)
+    if db_room is None:
+        raise HTTPException(status_code=404, detail="Номер не найден")
+    
+    # Проверяем, есть ли у номера активные бронирования
+    room_bookings = crud.get_bookings_by_room(db, room_id=room_id)
+    active_bookings = [b for b in room_bookings if b.status in ["Активно", "Подтверждено"]]
+    
+    if active_bookings:
+        raise HTTPException(
+            status_code=400, 
+            detail="Невозможно удалить номер с активными бронированиями"
+        )
+    
+    # Удаляем номер
+    db.delete(db_room)
+    db.commit()
+    return db_room
+
 @app.get("/hotels/{hotel_id}/rooms/", response_model=List[schemas.Room])
 def read_hotel_rooms(hotel_id: int, db: Session = Depends(get_db)):
     db_hotel = crud.get_hotel(db, hotel_id=hotel_id)
     if db_hotel is None:
         raise HTTPException(status_code=404, detail="Гостиница не найдена")
     return crud.get_rooms_by_hotel(db, hotel_id=hotel_id)
+
+@app.get("/hotels/{hotel_id}/employees/", response_model=List[schemas.Employee])
+def read_hotel_employees(hotel_id: int, db: Session = Depends(get_db)):
+    db_hotel = crud.get_hotel(db, hotel_id=hotel_id)
+    if db_hotel is None:
+        raise HTTPException(status_code=404, detail="Гостиница не найдена")
+    return crud.get_employees_by_hotel(db, hotel_id=hotel_id)
 
 @app.get("/available-rooms/", response_model=List[schemas.Room])
 def read_available_rooms(check_in_date: str, check_out_date: str, db: Session = Depends(get_db)):
@@ -115,6 +171,43 @@ def read_client(client_id: int, db: Session = Depends(get_db)):
 def create_client(client: schemas.ClientCreate, db: Session = Depends(get_db)):
     return crud.create_client(db=db, client=client)
 
+@app.put("/clients/{client_id}", response_model=schemas.Client)
+def update_client(client_id: int, client: schemas.ClientCreate, db: Session = Depends(get_db)):
+    db_client = crud.get_client(db, client_id=client_id)
+    if db_client is None:
+        raise HTTPException(status_code=404, detail="Клиент не найден")
+    
+    # Обновляем поля клиента
+    db_client.first_name = client.first_name
+    db_client.last_name = client.last_name
+    db_client.passport_number = client.passport_number
+    db_client.city = client.city
+    
+    db.commit()
+    db.refresh(db_client)
+    return db_client
+
+@app.delete("/clients/{client_id}", response_model=schemas.Client)
+def delete_client(client_id: int, db: Session = Depends(get_db)):
+    db_client = crud.get_client(db, client_id=client_id)
+    if db_client is None:
+        raise HTTPException(status_code=404, detail="Клиент не найден")
+    
+    # Проверяем, есть ли у клиента активные бронирования
+    client_bookings = crud.get_bookings_by_client(db, client_id=client_id)
+    active_bookings = [b for b in client_bookings if b.status in ["Активно", "Подтверждено"]]
+    
+    if active_bookings:
+        raise HTTPException(
+            status_code=400, 
+            detail="Невозможно удалить клиента с активными бронированиями"
+        )
+    
+    # Удаляем клиента
+    db.delete(db_client)
+    db.commit()
+    return db_client
+
 @app.get("/clients/city/{city}", response_model=List[schemas.Client])
 def read_clients_by_city(city: str, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     return crud.get_clients_by_city(db, city=city, skip=skip, limit=limit)
@@ -134,7 +227,99 @@ def read_booking(booking_id: int, db: Session = Depends(get_db)):
 
 @app.post("/bookings/", response_model=schemas.Booking)
 def create_booking(booking: schemas.BookingCreate, db: Session = Depends(get_db)):
-    return crud.create_booking(db=db, booking=booking)
+    # Проверяем доступность номера
+    try:
+        # Проверяем, существует ли номер
+        room = crud.get_room(db, room_id=booking.room_id)
+        if not room:
+            raise HTTPException(status_code=404, detail="Указанный номер не найден")
+            
+        # Проверяем, существует ли клиент
+        client = crud.get_client(db, client_id=booking.client_id)
+        if not client:
+            raise HTTPException(status_code=404, detail="Указанный клиент не найден")
+            
+        # Создаем бронирование
+        return crud.create_booking(db=db, booking=booking)
+    except HTTPException as e:
+        # Пробрасываем исключение дальше
+        raise e
+    except Exception as e:
+        # Логируем непредвиденную ошибку
+        print(f"Ошибка при создании бронирования: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Не удалось создать бронирование: {str(e)}")
+
+@app.put("/bookings/{booking_id}", response_model=schemas.Booking)
+def update_booking(booking_id: int, booking: schemas.BookingCreate, db: Session = Depends(get_db)):
+    db_booking = crud.get_booking(db, booking_id=booking_id)
+    if db_booking is None:
+        raise HTTPException(status_code=404, detail="Бронирование не найдено")
+    
+    # Проверяем, доступен ли номер в новые даты (если они изменились)
+    if (db_booking.check_in_date != booking.check_in_date or 
+        db_booking.check_out_date != booking.check_out_date or
+        db_booking.room_id != booking.room_id):
+        # Проверяем конфликты с другими бронированиями
+        conflicts = db.query(models.Booking).filter(
+            models.Booking.room_id == booking.room_id,
+            models.Booking.booking_id != booking_id,
+            models.Booking.check_in_date <= booking.check_out_date,
+            models.Booking.check_out_date >= booking.check_in_date
+        ).first()
+        
+        if conflicts:
+            raise HTTPException(
+                status_code=400,
+                detail="Номер уже забронирован на указанные даты"
+            )
+    
+    # Обновляем поля бронирования
+    db_booking.room_id = booking.room_id
+    db_booking.client_id = booking.client_id
+    db_booking.check_in_date = booking.check_in_date
+    db_booking.check_out_date = booking.check_out_date
+    db_booking.status = booking.status
+    
+    db.commit()
+    db.refresh(db_booking)
+    return db_booking
+
+@app.put("/bookings/{booking_id}/status", response_model=schemas.Booking)
+def update_booking_status(booking_id: int, status: schemas.BookingStatusUpdate, db: Session = Depends(get_db)):
+    db_booking = crud.get_booking(db, booking_id=booking_id)
+    if db_booking is None:
+        raise HTTPException(status_code=404, detail="Бронирование не найдено")
+    
+    db_booking.status = status.status
+    db.commit()
+    db.refresh(db_booking)
+    return db_booking
+
+@app.delete("/bookings/{booking_id}", response_model=schemas.Booking)
+def delete_booking(booking_id: int, db: Session = Depends(get_db)):
+    db_booking = crud.get_booking(db, booking_id=booking_id)
+    if db_booking is None:
+        raise HTTPException(status_code=404, detail="Бронирование не найдено")
+    
+    # Удаляем бронирование
+    db.delete(db_booking)
+    db.commit()
+    
+    # Если номер был занят этим бронированием, обновляем его статус
+    room = crud.get_room(db, room_id=db_booking.room_id)
+    if room and room.status == "Занят":
+        # Проверяем, есть ли другие активные бронирования для этого номера
+        other_bookings = db.query(models.Booking).filter(
+            models.Booking.room_id == db_booking.room_id,
+            models.Booking.booking_id != booking_id,
+            models.Booking.status.in_(["Активно", "Подтверждено"])
+        ).first()
+        
+        if not other_bookings:
+            room.status = "Свободен"
+            db.commit()
+    
+    return db_booking
 
 @app.get("/clients/{client_id}/bookings/", response_model=List[schemas.Booking])
 def read_client_bookings(client_id: int, db: Session = Depends(get_db)):
@@ -167,16 +352,39 @@ def read_employee(employee_id: int, db: Session = Depends(get_db)):
 def create_employee(employee: schemas.EmployeeCreate, db: Session = Depends(get_db)):
     return crud.create_employee(db=db, employee=employee)
 
-@app.get("/hotels/{hotel_id}/employees/", response_model=List[schemas.Employee])
-def read_hotel_employees(hotel_id: int, db: Session = Depends(get_db)):
-    db_hotel = crud.get_hotel(db, hotel_id=hotel_id)
-    if db_hotel is None:
-        raise HTTPException(status_code=404, detail="Гостиница не найдена")
-    return crud.get_employees_by_hotel(db, hotel_id=hotel_id)
+@app.put("/employees/{employee_id}", response_model=schemas.Employee)
+def update_employee(employee_id: int, employee: schemas.EmployeeCreate, db: Session = Depends(get_db)):
+    db_employee = crud.get_employee(db, employee_id=employee_id)
+    if db_employee is None:
+        raise HTTPException(status_code=404, detail="Сотрудник не найден")
+    
+    # Обновляем поля сотрудника
+    db_employee.hotel_id = employee.hotel_id
+    db_employee.first_name = employee.first_name
+    db_employee.last_name = employee.last_name
+    db_employee.status = employee.status
+    
+    db.commit()
+    db.refresh(db_employee)
+    return db_employee
 
 @app.put("/employees/{employee_id}/status/", response_model=schemas.Employee)
-def update_employee_status(employee_id: int, status: str, db: Session = Depends(get_db)):
-    return crud.update_employee_status(db, employee_id=employee_id, status=status)
+def update_employee_status(employee_id: int, status: schemas.EmployeeStatusUpdate, db: Session = Depends(get_db)):
+    return crud.update_employee_status(db, employee_id=employee_id, status=status.status)
+
+@app.delete("/employees/{employee_id}", response_model=schemas.Employee)
+def delete_employee(employee_id: int, db: Session = Depends(get_db)):
+    db_employee = crud.get_employee(db, employee_id=employee_id)
+    if db_employee is None:
+        raise HTTPException(status_code=404, detail="Сотрудник не найден")
+    
+    # Проверяем, есть ли у сотрудника активные расписания уборок
+    # Здесь должна быть проверка, если она требуется
+    
+    # Удаляем сотрудника
+    db.delete(db_employee)
+    db.commit()
+    return db_employee
 
 # Эндпоинты для расписания уборок
 @app.get("/cleaning-schedules/", response_model=List[schemas.CleaningSchedule])
@@ -222,6 +430,44 @@ def read_cleaning_log(log_id: int, db: Session = Depends(get_db)):
 @app.post("/cleaning-logs/", response_model=schemas.CleaningLog)
 def create_cleaning_log(log: schemas.CleaningLogCreate, db: Session = Depends(get_db)):
     return crud.create_cleaning_log(db=db, log=log)
+
+@app.put("/cleaning-logs/{log_id}", response_model=schemas.CleaningLog)
+def update_cleaning_log(log_id: int, log: schemas.CleaningLogCreate, db: Session = Depends(get_db)):
+    db_log = crud.get_cleaning_log(db, log_id=log_id)
+    if db_log is None:
+        raise HTTPException(status_code=404, detail="Запись не найдена")
+    
+    # Обновляем поля журнала уборок
+    db_log.room_id = log.room_id
+    db_log.employee_id = log.employee_id
+    db_log.cleaning_date = log.cleaning_date
+    db_log.status = log.status
+    
+    db.commit()
+    db.refresh(db_log)
+    return db_log
+
+@app.put("/cleaning-logs/{log_id}/status", response_model=schemas.CleaningLog)
+def update_cleaning_log_status(log_id: int, status: schemas.CleaningLogStatusUpdate, db: Session = Depends(get_db)):
+    db_log = crud.get_cleaning_log(db, log_id=log_id)
+    if db_log is None:
+        raise HTTPException(status_code=404, detail="Запись не найдена")
+    
+    db_log.status = status.status
+    db.commit()
+    db.refresh(db_log)
+    return db_log
+
+@app.delete("/cleaning-logs/{log_id}", response_model=schemas.CleaningLog)
+def delete_cleaning_log(log_id: int, db: Session = Depends(get_db)):
+    db_log = crud.get_cleaning_log(db, log_id=log_id)
+    if db_log is None:
+        raise HTTPException(status_code=404, detail="Запись не найдена")
+    
+    # Удаляем запись журнала уборок
+    db.delete(db_log)
+    db.commit()
+    return db_log
 
 @app.get("/rooms/{room_id}/cleaning-logs/", response_model=List[schemas.CleaningLog])
 def read_room_cleaning_logs(room_id: int, db: Session = Depends(get_db)):

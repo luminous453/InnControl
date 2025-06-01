@@ -150,13 +150,14 @@ def get_bookings_by_room(db: Session, room_id: int, skip: int = 0, limit: int = 
 
 def create_booking(db: Session, booking: schemas.BookingCreate):
     # Проверяем, доступен ли номер в указанные даты
-    room_available = not db.query(models.Booking).filter(
+    conflicts = db.query(models.Booking).filter(
         models.Booking.room_id == booking.room_id,
         models.Booking.check_in_date <= booking.check_out_date,
-        models.Booking.check_out_date >= booking.check_in_date
+        models.Booking.check_out_date >= booking.check_in_date,
+        models.Booking.status.notin_(["Отменено", "Выселен"])
     ).first()
     
-    if not room_available:
+    if conflicts:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Номер уже забронирован на указанные даты"
@@ -167,8 +168,9 @@ def create_booking(db: Session, booking: schemas.BookingCreate):
     db.commit()
     db.refresh(db_booking)
     
-    # Обновляем статус номера
-    update_room_status(db, booking.room_id, "Занят")
+    # Обновляем статус номера если бронирование активно
+    if booking.status in ["Активно", "Подтверждено", "Заселен"]:
+        update_room_status(db, booking.room_id, "Занят")
     
     return db_booking
 

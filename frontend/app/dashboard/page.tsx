@@ -2,37 +2,81 @@
 
 import { useState, useEffect } from 'react';
 import { FaBed, FaCalendarAlt, FaUsers, FaUserTie, FaChartLine, FaPercent } from 'react-icons/fa';
-
-// Типы для статистики
-interface StatsData {
-  totalRooms: number;
-  occupiedRooms: number;
-  availableRooms: number;
-  totalBookings: number;
-  totalClients: number;
-  totalEmployees: number;
-  occupancyRate: number;
-  averageRating: number;
-}
+import { dashboardService } from '@/services/dashboardService';
+import { DashboardStats, RecentBooking, RecentCleaning } from '@/services/dashboardService';
+import { hotelService } from '@/services/hotelService';
 
 export default function DashboardPage() {
-  const [statsData, setStatsData] = useState<StatsData>({
-    totalRooms: 50,
-    occupiedRooms: 35,
-    availableRooms: 15,
-    totalBookings: 42,
-    totalClients: 38,
-    totalEmployees: 15,
-    occupancyRate: 70,
-    averageRating: 4.7
+  const [statsData, setStatsData] = useState<DashboardStats>({
+    totalRooms: 0,
+    occupiedRooms: 0,
+    availableRooms: 0,
+    totalBookings: 0,
+    totalClients: 0,
+    totalEmployees: 0,
+    occupancyRate: 0,
+    averageRating: 0
   });
   
-  // В реальном проекте здесь будет загрузка данных с API
-  // useEffect(() => {
-  //   fetch('/api/dashboard/stats')
-  //     .then(res => res.json())
-  //     .then(data => setStatsData(data));
-  // }, []);
+  const [recentBookings, setRecentBookings] = useState<RecentBooking[]>([]);
+  const [todayCleanings, setTodayCleanings] = useState<RecentCleaning[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Загрузка данных с API
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Сначала получаем список всех гостиниц
+        const hotels = await hotelService.getAllHotels();
+        
+        // Если нет гостиниц, показываем ошибку
+        if (!hotels || hotels.length === 0) {
+          setError('В базе данных нет гостиниц. Пожалуйста, добавьте хотя бы одну гостиницу.');
+          setLoading(false);
+          return;
+        }
+        
+        // Берем ID первой гостиницы в списке
+        const hotelId = hotels[0].hotel_id;
+        console.log(`Используем гостиницу с ID=${hotelId}`);
+        
+        // Загружаем статистику
+        const stats = await dashboardService.getDashboardStats(hotelId);
+        setStatsData(stats);
+        
+        // Загружаем последние бронирования
+        const bookings = await dashboardService.getRecentBookings();
+        setRecentBookings(bookings);
+        
+        // Загружаем уборки на сегодня
+        const cleanings = await dashboardService.getTodayCleanings();
+        setTodayCleanings(cleanings);
+      } catch (err) {
+        console.error('Ошибка при загрузке данных:', err);
+        
+        // Показываем пользователю детали ошибки
+        if (err instanceof Error) {
+          setError(`Не удалось загрузить данные: ${err.message}`);
+        } else {
+          setError('Не удалось загрузить данные. Пожалуйста, проверьте подключение к базе данных и запуск сервера API.');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchDashboardData();
+  }, []);
+  
+  // Форматирование даты
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('ru-RU');
+  };
   
   const statCards = [
     {
@@ -85,6 +129,34 @@ export default function DashboardPage() {
     }
   ];
 
+  // Отображение состояния загрузки
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+  
+  // Отображение ошибки
+  if (error) {
+    return (
+      <div className="bg-red-100 p-4 rounded-md text-red-700">
+        <h2 className="text-lg font-semibold">Ошибка</h2>
+        <p>{error}</p>
+        <div className="mt-4">
+          <p className="text-sm">Возможные причины:</p>
+          <ul className="list-disc list-inside text-sm mt-2">
+            <li>Не запущен бэкенд-сервер (uvicorn)</li>
+            <li>Нет подключения к базе данных PostgreSQL</li>
+            <li>В базе данных нет гостиницы</li>
+            <li>Проблема с API-запросами</li>
+          </ul>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="mb-8">
@@ -109,44 +181,42 @@ export default function DashboardPage() {
       <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card">
           <h3 className="text-xl font-semibold text-gray-800 mb-4">Последние бронирования</h3>
-          <div className="space-y-3">
-            <div className="flex justify-between p-2 bg-cream rounded">
-              <p>Иванов И.И.</p>
-              <p>Номер 102</p>
-              <p>12.10.2023 - 15.10.2023</p>
+          {recentBookings.length > 0 ? (
+            <div className="space-y-3">
+              {recentBookings.map((booking, index) => (
+                <div key={index} className="flex justify-between p-2 bg-cream rounded">
+                  <p>{booking.clientName}</p>
+                  <p>Номер {booking.roomNumber}</p>
+                  <p>{formatDate(booking.checkInDate)} - {formatDate(booking.checkOutDate)}</p>
+                </div>
+              ))}
             </div>
-            <div className="flex justify-between p-2 bg-cream rounded">
-              <p>Петров П.П.</p>
-              <p>Номер 205</p>
-              <p>14.10.2023 - 16.10.2023</p>
-            </div>
-            <div className="flex justify-between p-2 bg-cream rounded">
-              <p>Сидорова А.В.</p>
-              <p>Номер 301</p>
-              <p>15.10.2023 - 20.10.2023</p>
-            </div>
-          </div>
+          ) : (
+            <p className="text-gray-500">Нет активных бронирований</p>
+          )}
         </div>
         
         <div className="card">
           <h3 className="text-xl font-semibold text-gray-800 mb-4">Уборка на сегодня</h3>
-          <div className="space-y-3">
-            <div className="flex justify-between p-2 bg-cream rounded">
-              <p>Номер 101</p>
-              <p>Смирнова Е.В.</p>
-              <p className="text-green-600">Завершена</p>
+          {todayCleanings.length > 0 ? (
+            <div className="space-y-3">
+              {todayCleanings.map((cleaning, index) => (
+                <div key={index} className="flex justify-between p-2 bg-cream rounded">
+                  <p>Номер {cleaning.roomNumber}</p>
+                  <p>{cleaning.employeeName}</p>
+                  <p className={`
+                    ${cleaning.status === 'Завершена' ? 'text-green-600' : ''}
+                    ${cleaning.status === 'В процессе' ? 'text-yellow-600' : ''}
+                    ${cleaning.status === 'Ожидает' ? 'text-gray-600' : ''}
+                  `}>
+                    {cleaning.status}
+                  </p>
+                </div>
+              ))}
             </div>
-            <div className="flex justify-between p-2 bg-cream rounded">
-              <p>Номер 203</p>
-              <p>Козлов А.А.</p>
-              <p className="text-yellow-600">В процессе</p>
-            </div>
-            <div className="flex justify-between p-2 bg-cream rounded">
-              <p>Номер 305</p>
-              <p>Новикова И.П.</p>
-              <p className="text-gray-600">Ожидает</p>
-            </div>
-          </div>
+          ) : (
+            <p className="text-gray-500">Нет уборок на сегодня</p>
+          )}
         </div>
       </div>
     </div>

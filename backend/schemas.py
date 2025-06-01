@@ -42,6 +42,9 @@ class RoomBase(BaseModel):
 class RoomCreate(RoomBase):
     pass
 
+class RoomStatusUpdate(BaseModel):
+    status: str
+
 class Room(RoomBase):
     room_id: int
 
@@ -82,6 +85,9 @@ class BookingBase(BaseModel):
 class BookingCreate(BookingBase):
     pass
 
+class BookingStatusUpdate(BaseModel):
+    status: str
+
 class Booking(BookingBase):
     booking_id: int
 
@@ -100,10 +106,13 @@ class EmployeeBase(BaseModel):
     hotel_id: int
     first_name: str
     last_name: str
-    status: str = "Активен"
+    status: str
 
 class EmployeeCreate(EmployeeBase):
     pass
+
+class EmployeeStatusUpdate(BaseModel):
+    status: str
 
 class Employee(EmployeeBase):
     employee_id: int
@@ -137,9 +146,13 @@ class CleaningLogBase(BaseModel):
     room_id: int
     employee_id: int
     cleaning_date: date = Field(default_factory=date.today)
+    status: str = "Ожидает"
 
 class CleaningLogCreate(CleaningLogBase):
     pass
+
+class CleaningLogStatusUpdate(BaseModel):
+    status: str
 
 class CleaningLog(CleaningLogBase):
     log_id: int

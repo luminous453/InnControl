@@ -2,72 +2,157 @@
 
 import { useState, useEffect } from 'react';
 import { FaUserTie, FaPlus, FaEdit, FaTrash, FaCheck, FaTimes } from 'react-icons/fa';
+import { employeeService, Employee as ApiEmployee } from '@/services/employeeService';
 
-// Типы для сотрудников
-interface Employee {
-  employee_id: number;
-  first_name: string;
-  last_name: string;
-  status: string;
-  position: string;
+// Расширенный интерфейс сотрудника для отображения
+interface EmployeeDisplay extends ApiEmployee {
+  position: string; // Дополнительное поле для отображения
+  cleaning_count?: number;
 }
 
 export default function EmployeesPage() {
-  const [employees, setEmployees] = useState<Employee[]>([
-    {
-      employee_id: 1,
-      first_name: 'Елена',
-      last_name: 'Смирнова',
-      status: 'Активен',
-      position: 'Горничная'
-    },
-    {
-      employee_id: 2,
-      first_name: 'Иван',
-      last_name: 'Петров',
-      status: 'Активен',
-      position: 'Горничная'
-    },
-    {
-      employee_id: 3,
-      first_name: 'Анна',
-      last_name: 'Козлова',
-      status: 'Активен',
-      position: 'Горничная'
-    },
-    {
-      employee_id: 4,
-      first_name: 'Михаил',
-      last_name: 'Соколов',
-      status: 'В отпуске',
-      position: 'Администратор'
-    },
-    {
-      employee_id: 5,
-      first_name: 'Сергей',
-      last_name: 'Новиков',
-      status: 'Уволен',
-      position: 'Техник'
+  const [employees, setEmployees] = useState<EmployeeDisplay[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<EmployeeDisplay | null>(null);
+  const [newEmployee, setNewEmployee] = useState({
+    first_name: '',
+    last_name: '',
+    position: 'Горничная',
+    hotel_id: 1
+  });
+  
+  // Позиции сотрудников (в реальном проекте должны загружаться с API)
+  const positions = ['Администратор', 'Горничная', 'Консьерж', 'Технический специалист', 'Менеджер'];
+  
+  // Загрузка данных с API
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        setLoading(true);
+        const data = await employeeService.getAllEmployees();
+        
+        // Преобразуем в формат для отображения
+        // В реальном проекте информация о должности должна приходить с API
+        const displayData = data.map(emp => ({
+          ...emp,
+          position: emp.employee_id % 5 === 0 ? 'Менеджер' : 
+                    emp.employee_id % 4 === 0 ? 'Технический специалист' : 
+                    emp.employee_id % 3 === 0 ? 'Консьерж' : 
+                    emp.employee_id % 2 === 0 ? 'Администратор' : 'Горничная'
+        }));
+        
+        setEmployees(displayData);
+        setError(null);
+      } catch (err) {
+        console.error('Ошибка при загрузке сотрудников:', err);
+        setError('Не удалось загрузить данные сотрудников');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEmployees();
+  }, []);
+
+  // Функция для создания нового сотрудника
+  const handleCreateEmployee = async () => {
+    try {
+      const employeeData = {
+        hotel_id: newEmployee.hotel_id,
+        first_name: newEmployee.first_name,
+        last_name: newEmployee.last_name,
+        status: 'Активен'
+      };
+      
+      const createdEmployee = await employeeService.createEmployee(employeeData);
+      
+      // Добавляем созданного сотрудника в список с дополнительным полем position
+      setEmployees(prev => [...prev, {
+        ...createdEmployee,
+        position: newEmployee.position
+      }]);
+      
+      // Сбрасываем форму и закрываем модальное окно
+      setNewEmployee({
+        first_name: '',
+        last_name: '',
+        position: 'Горничная',
+        hotel_id: 1
+      });
+      setShowModal(false);
+    } catch (err) {
+      console.error('Ошибка при создании сотрудника:', err);
+      setError('Не удалось создать сотрудника');
     }
-  ]);
+  };
+
+  // Функция для обновления статуса сотрудника
+  const handleUpdateStatus = async (id: number, status: string) => {
+    try {
+      const statusUpdate = { status }; // Создаем объект с полем status
+      await employeeService.updateEmployeeStatus(id, statusUpdate);
+      
+      // Обновляем статус в локальном состоянии
+      setEmployees(prev => 
+        prev.map(emp => 
+          emp.employee_id === id ? { ...emp, status } : emp
+        )
+      );
+    } catch (err) {
+      console.error('Ошибка при обновлении статуса:', err);
+      setError('Не удалось обновить статус сотрудника');
+    }
+  };
   
-  // В реальном проекте здесь будет загрузка данных с API
-  // useEffect(() => {
-  //   fetch('/api/employees')
-  //     .then(res => res.json())
-  //     .then(data => setEmployees(data));
-  // }, []);
+  // Функция для редактирования сотрудника
+  const handleEditEmployee = async () => {
+    if (!editingEmployee) return;
+    
+    try {
+      const employeeData = {
+        hotel_id: editingEmployee.hotel_id,
+        first_name: editingEmployee.first_name,
+        last_name: editingEmployee.last_name,
+        status: editingEmployee.status
+      };
+      
+      await employeeService.updateEmployee(editingEmployee.employee_id, employeeData);
+      
+      // Обновляем сотрудника в списке
+      setEmployees(prev => 
+        prev.map(emp => 
+          emp.employee_id === editingEmployee.employee_id ? editingEmployee : emp
+        )
+      );
+      
+      // Закрываем модальное окно
+      setEditingEmployee(null);
+      setShowEditModal(false);
+    } catch (err) {
+      console.error('Ошибка при редактировании сотрудника:', err);
+      setError('Не удалось обновить данные сотрудника');
+    }
+  };
   
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Активен':
-        return 'text-green-600';
-      case 'В отпуске':
-        return 'text-orange-500';
-      case 'Уволен':
-        return 'text-red-600';
-      default:
-        return 'text-gray-600';
+  // Функция для открытия модального окна редактирования
+  const openEditModal = (employee: EmployeeDisplay) => {
+    setEditingEmployee(employee);
+    setShowEditModal(true);
+  };
+  
+  // Функция для удаления сотрудника
+  const handleDeleteEmployee = async (id: number) => {
+    try {
+      await employeeService.deleteEmployee(id);
+      
+      // Удаляем сотрудника из списка
+      setEmployees(prev => prev.filter(emp => emp.employee_id !== id));
+    } catch (err) {
+      console.error('Ошибка при удалении сотрудника:', err);
+      setError('Не удалось удалить сотрудника');
     }
   };
 
@@ -75,62 +160,235 @@ export default function EmployeesPage() {
     <div>
       <div className="mb-6 flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-800">Сотрудники</h2>
-        <button className="btn-primary flex items-center space-x-2">
+        <button 
+          className="btn-primary flex items-center space-x-2"
+          onClick={() => setShowModal(true)}
+        >
           <FaPlus />
           <span>Добавить сотрудника</span>
         </button>
       </div>
       
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Имя</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Фамилия</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Должность</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Действия</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {employees.map(employee => (
-              <tr key={employee.employee_id}>
-                <td className="px-6 py-4 whitespace-nowrap">{employee.employee_id}</td>
-                <td className="px-6 py-4 whitespace-nowrap">{employee.first_name}</td>
-                <td className="px-6 py-4 whitespace-nowrap">{employee.last_name}</td>
-                <td className="px-6 py-4 whitespace-nowrap">{employee.position}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`inline-flex items-center ${getStatusColor(employee.status)}`}>
-                    {employee.status === 'Активен' ? <FaCheck className="mr-1" /> : 
-                     employee.status === 'Уволен' ? <FaTimes className="mr-1" /> : null}
-                    {employee.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  <div className="flex space-x-3">
-                    <button className="text-secondary hover:text-secondary-hover">
-                      <FaEdit />
-                    </button>
-                    <button className="text-red-600 hover:text-red-800">
-                      <FaTrash />
-                    </button>
-                  </div>
-                </td>
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
+          {error}
+        </div>
+      )}
+      
+      {loading ? (
+        <div className="flex justify-center p-8">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Имя</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Фамилия</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Уборок</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Действия</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {employees.map(employee => (
+                <tr key={employee.employee_id}>
+                  <td className="px-6 py-4 whitespace-nowrap">{employee.first_name}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">{employee.last_name}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <select
+                      className="px-3 py-2 text-sm font-medium rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+                      value={employee.status}
+                      onChange={(e) => handleUpdateStatus(employee.employee_id, e.target.value)}
+                    >
+                      <option value="Активен">Активен</option>
+                      <option value="В отпуске">В отпуске</option>
+                      <option value="Уволен">Уволен</option>
+                    </select>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">{employee.cleaning_count || 0}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <div className="flex space-x-2">
+                      <button 
+                        className="text-secondary hover:text-secondary-hover"
+                        onClick={() => openEditModal(employee)}
+                      >
+                        <FaEdit />
+                      </button>
+                      {employee.status === 'Активен' ? (
+                        <button 
+                          className="text-yellow-500 hover:text-yellow-700"
+                          onClick={() => handleUpdateStatus(employee.employee_id, 'В отпуске')}
+                          title="Отправить в отпуск"
+                        >
+                          <FaTimes />
+                        </button>
+                      ) : (
+                        <button 
+                          className="text-green-500 hover:text-green-700"
+                          onClick={() => handleUpdateStatus(employee.employee_id, 'Активен')}
+                          title="Вернуть к работе"
+                        >
+                          <FaCheck />
+                        </button>
+                      )}
+                      <button 
+                        className="text-red-600 hover:text-red-800"
+                        onClick={() => handleDeleteEmployee(employee.employee_id)}
+                        title="Удалить сотрудника"
+                      >
+                        <FaTrash />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       
       <div className="mt-8">
         <h3 className="text-xl font-semibold text-gray-800 mb-4">Информация</h3>
         <div className="bg-white p-4 rounded-lg shadow">
           <p>В этом разделе вы можете управлять данными о сотрудниках гостиницы.</p>
           <p className="mt-2">Для добавления нового сотрудника нажмите кнопку "Добавить сотрудника".</p>
-          <p className="mt-2">Для редактирования информации о сотруднике используйте кнопку редактирования в таблице.</p>
+          <p className="mt-2">Для управления статусом или редактирования сотрудника используйте кнопки в таблице.</p>
         </div>
       </div>
+      
+      {/* Модальное окно для добавления сотрудника */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+            <h3 className="text-xl font-semibold mb-4">Добавить сотрудника</h3>
+            
+            <div className="mb-4">
+              <label className="label">Имя</label>
+              <input 
+                type="text" 
+                className="input w-full" 
+                value={newEmployee.first_name}
+                onChange={(e) => setNewEmployee({...newEmployee, first_name: e.target.value})}
+              />
+            </div>
+            
+            <div className="mb-4">
+              <label className="label">Фамилия</label>
+              <input 
+                type="text" 
+                className="input w-full" 
+                value={newEmployee.last_name}
+                onChange={(e) => setNewEmployee({...newEmployee, last_name: e.target.value})}
+              />
+            </div>
+            
+            <div className="mb-4">
+              <label className="label">Должность</label>
+              <select 
+                className="select w-full"
+                value={newEmployee.position}
+                onChange={(e) => setNewEmployee({...newEmployee, position: e.target.value})}
+              >
+                {positions.map(position => (
+                  <option key={position} value={position}>{position}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="flex justify-end space-x-3 mt-6">
+              <button 
+                className="btn-secondary"
+                onClick={() => setShowModal(false)}
+              >
+                Отмена
+              </button>
+              <button 
+                className="btn-primary"
+                onClick={handleCreateEmployee}
+                disabled={!newEmployee.first_name || !newEmployee.last_name}
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Модальное окно для редактирования сотрудника */}
+      {showEditModal && editingEmployee && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+            <h3 className="text-xl font-semibold mb-4">Редактировать сотрудника</h3>
+            
+            <div className="mb-4">
+              <label className="label">Имя</label>
+              <input 
+                type="text" 
+                className="input w-full" 
+                value={editingEmployee.first_name}
+                onChange={(e) => setEditingEmployee({...editingEmployee, first_name: e.target.value})}
+              />
+            </div>
+            
+            <div className="mb-4">
+              <label className="label">Фамилия</label>
+              <input 
+                type="text" 
+                className="input w-full" 
+                value={editingEmployee.last_name}
+                onChange={(e) => setEditingEmployee({...editingEmployee, last_name: e.target.value})}
+              />
+            </div>
+            
+            <div className="mb-4">
+              <label className="label">Должность</label>
+              <select 
+                className="select w-full"
+                value={editingEmployee.position}
+                onChange={(e) => setEditingEmployee({...editingEmployee, position: e.target.value})}
+              >
+                {positions.map(position => (
+                  <option key={position} value={position}>{position}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="mb-4">
+              <label className="label">Статус</label>
+              <select 
+                className="select w-full"
+                value={editingEmployee.status}
+                onChange={(e) => setEditingEmployee({...editingEmployee, status: e.target.value})}
+              >
+                <option value="Активен">Активен</option>
+                <option value="В отпуске">В отпуске</option>
+                <option value="Уволен">Уволен</option>
+              </select>
+            </div>
+            
+            <div className="flex justify-end space-x-3 mt-6">
+              <button 
+                className="btn-secondary"
+                onClick={() => {
+                  setEditingEmployee(null);
+                  setShowEditModal(false);
+                }}
+              >
+                Отмена
+              </button>
+              <button 
+                className="btn-primary"
+                onClick={handleEditEmployee}
+                disabled={!editingEmployee.first_name || !editingEmployee.last_name}
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 

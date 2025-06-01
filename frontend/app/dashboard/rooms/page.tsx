@@ -1,97 +1,55 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { FaSearch, FaFilter, FaPlus, FaEdit, FaTrash } from 'react-icons/fa';
-
-// Типы для номеров
-interface RoomType {
-  id: number;
-  name: string;
-  description: string;
-  price_per_night: number;
-  capacity: number;
-}
-
-interface Room {
-  id: number;
-  room_number: string;
-  floor: number;
-  status: 'Свободен' | 'Занят' | 'Уборка' | 'Техобслуживание';
-  room_type: RoomType;
-}
+import { roomService, RoomWithDetails, RoomCreate, RoomStatusUpdate } from '../../../services/roomService';
+import { hotelService } from '../../../services/hotelService';
 
 export default function RoomsPage() {
-  const [rooms, setRooms] = useState<Room[]>([
-    {
-      id: 1,
-      room_number: '101',
-      floor: 1,
-      status: 'Свободен',
-      room_type: {
-        id: 1,
-        name: 'Стандарт',
-        description: 'Стандартный номер с одной двуспальной кроватью',
-        price_per_night: 3000,
-        capacity: 2
-      }
-    },
-    {
-      id: 2,
-      room_number: '102',
-      floor: 1,
-      status: 'Занят',
-      room_type: {
-        id: 1,
-        name: 'Стандарт',
-        description: 'Стандартный номер с одной двуспальной кроватью',
-        price_per_night: 3000,
-        capacity: 2
-      }
-    },
-    {
-      id: 3,
-      room_number: '201',
-      floor: 2,
-      status: 'Уборка',
-      room_type: {
-        id: 2,
-        name: 'Люкс',
-        description: 'Просторный номер с гостиной и спальней',
-        price_per_night: 5000,
-        capacity: 3
-      }
-    },
-    {
-      id: 4,
-      room_number: '301',
-      floor: 3,
-      status: 'Свободен',
-      room_type: {
-        id: 3,
-        name: 'Полулюкс',
-        description: 'Улучшенный номер с дополнительными удобствами',
-        price_per_night: 4000,
-        capacity: 2
-      }
-    },
-    {
-      id: 5,
-      room_number: '302',
-      floor: 3,
-      status: 'Занят',
-      room_type: {
-        id: 3,
-        name: 'Полулюкс',
-        description: 'Улучшенный номер с дополнительными удобствами',
-        price_per_night: 4000,
-        capacity: 2
-      }
-    }
-  ]);
-  
+  const [rooms, setRooms] = useState<RoomWithDetails[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterType, setFilterType] = useState('');
+  
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [currentRoom, setCurrentRoom] = useState<RoomWithDetails | null>(null);
+  
+  // Получение данных о номерах
+  useEffect(() => {
+    const fetchRooms = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Получаем данные о гостинице
+        const hotel = await hotelService.getHotel(1); // ID = 1 для примера
+        
+        // Получаем данные о номерах
+        const roomsData = await roomService.getRoomsByHotel(hotel.hotel_id);
+        
+        // Для каждого номера получаем детальную информацию
+        const detailedRooms = await Promise.all(
+          roomsData.map(async (room) => {
+            const detailedRoom = await roomService.getRoom(room.room_id);
+            return detailedRoom;
+          })
+        );
+        
+        setRooms(detailedRooms);
+      } catch (err) {
+        console.error('Ошибка при загрузке номеров:', err);
+        setError('Не удалось загрузить данные о номерах');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchRooms();
+  }, []);
   
   // Фильтрация комнат
   const filteredRooms = rooms.filter(room => {
@@ -116,12 +74,57 @@ export default function RoomsPage() {
       default: return 'bg-gray-100 text-gray-800';
     }
   };
+  
+  // Функция для изменения статуса номера
+  const handleStatusChange = async (roomId: number, newStatus: string) => {
+    try {
+      setError(null);
+      const statusUpdate: RoomStatusUpdate = { status: newStatus };
+      await roomService.updateRoomStatus(roomId, statusUpdate);
+      
+      // Обновление списка номеров
+      setRooms(prevRooms => 
+        prevRooms.map(room => 
+          room.room_id === roomId ? { ...room, status: newStatus } : room
+        )
+      );
+    } catch (err) {
+      console.error('Ошибка при изменении статуса номера:', err);
+      setError('Не удалось изменить статус номера');
+    }
+  };
+  
+  // Функция для удаления номера
+  const handleDeleteRoom = async (roomId: number) => {
+    try {
+      setError(null);
+      await roomService.deleteRoom(roomId);
+      
+      // Обновление списка номеров
+      setRooms(prevRooms => prevRooms.filter(room => room.room_id !== roomId));
+      setShowDeleteModal(false);
+    } catch (err) {
+      console.error('Ошибка при удалении номера:', err);
+      setError('Не удалось удалить номер');
+    }
+  };
+
+  if (loading) {
+    return <div className="text-center p-8">Загрузка данных...</div>;
+  }
+  
+  if (error) {
+    return <div className="text-center p-8 text-red-600">{error}</div>;
+  }
 
   return (
     <div>
       <div className="mb-6 flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-800">Управление номерами</h2>
-        <button className="btn-primary flex items-center space-x-2">
+        <button 
+          className="btn-primary flex items-center space-x-2"
+          onClick={() => setShowAddModal(true)}
+        >
           <FaPlus />
           <span>Добавить номер</span>
         </button>
@@ -184,33 +187,63 @@ export default function RoomsPage() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {filteredRooms.map(room => (
-              <tr key={room.id}>
-                <td className="px-6 py-4 whitespace-nowrap">{room.room_number}</td>
-                <td className="px-6 py-4 whitespace-nowrap">{room.floor}</td>
-                <td className="px-6 py-4 whitespace-nowrap">{room.room_type.name}</td>
-                <td className="px-6 py-4 whitespace-nowrap">{room.room_type.capacity} чел.</td>
-                <td className="px-6 py-4 whitespace-nowrap">{room.room_type.price_per_night} ₽</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(room.status)}`}>
-                    {room.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <div className="flex space-x-2">
-                    <button className="text-secondary hover:text-secondary-hover">
-                      <FaEdit />
-                    </button>
-                    <button className="text-red-600 hover:text-red-800">
-                      <FaTrash />
-                    </button>
-                  </div>
+            {filteredRooms.length > 0 ? (
+              filteredRooms.map(room => (
+                <tr key={room.room_id}>
+                  <td className="px-6 py-4 whitespace-nowrap">{room.room_number}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">{room.floor}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">{room.room_type.name}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">{room.room_type.capacity} чел.</td>
+                  <td className="px-6 py-4 whitespace-nowrap">{room.room_type.price_per_night} ₽</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <select
+                      className="px-3 py-2 text-sm font-medium rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+                      value={room.status}
+                      onChange={(e) => handleStatusChange(room.room_id, e.target.value)}
+                    >
+                      <option value="Свободен">Свободен</option>
+                      <option value="Занят">Занят</option>
+                      <option value="Уборка">Уборка</option>
+                      <option value="Техобслуживание">Техобслуживание</option>
+                    </select>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <div className="flex space-x-2">
+                      <button 
+                        className="text-secondary hover:text-secondary-hover"
+                        onClick={() => {
+                          setCurrentRoom(room);
+                          setShowEditModal(true);
+                        }}
+                      >
+                        <FaEdit />
+                      </button>
+                      <button 
+                        className="text-red-600 hover:text-red-800"
+                        onClick={() => {
+                          setCurrentRoom(room);
+                          setShowDeleteModal(true);
+                        }}
+                      >
+                        <FaTrash />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                  Нет данных для отображения
                 </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>
+      
+      {/* Здесь можно добавить модальные окна для добавления, редактирования и удаления номеров */}
+      {/* Реализация модальных окон потребовала бы добавления отдельных компонентов */}
     </div>
   );
 } 
