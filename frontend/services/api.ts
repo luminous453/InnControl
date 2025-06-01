@@ -9,23 +9,36 @@ async function fetchApi<T>(
 ): Promise<T> {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
+    'Accept': 'application/json'
   };
 
   const config: RequestInit = {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
-    // Добавляем credentials для работы с куками и CORS
-    credentials: 'include',
+    mode: 'cors',
+    credentials: 'omit',
   };
 
   try {
     console.log(`API запрос: ${method} ${API_URL}${endpoint}`, body ? JSON.stringify(body) : 'без тела');
     
+    // Сначала пробуем выполнить тестовый запрос для проверки CORS
+    try {
+      const testResponse = await fetch(`${API_URL}/api-test`, { mode: 'cors' });
+      console.log('Тест CORS:', testResponse.ok ? 'успешно' : 'неудача', testResponse.status);
+      if (testResponse.ok) {
+        const testData = await testResponse.json();
+        console.log('Тестовый ответ:', testData);
+      }
+    } catch (testError) {
+      console.error('Ошибка при проверке CORS:', testError);
+    }
+    
+    // Основной запрос
     const response = await fetch(`${API_URL}${endpoint}`, config);
     
-    // Выводим детальную информацию о статусе ответа
+    // Выводим детальную информацию о статусе ответа и заголовках
     console.log(`Статус ответа: ${response.status} ${response.statusText}`);
     
     if (!response.ok) {

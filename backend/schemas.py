@@ -14,7 +14,7 @@ class Hotel(HotelBase):
     hotel_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Схемы для RoomType
 class RoomTypeBase(BaseModel):
@@ -29,7 +29,7 @@ class RoomType(RoomTypeBase):
     type_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Схемы для Room
 class RoomBase(BaseModel):
@@ -49,14 +49,14 @@ class Room(RoomBase):
     room_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class RoomWithDetails(Room):
     room_type: RoomType
     hotel: Hotel
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Схемы для Client
 class ClientBase(BaseModel):
@@ -72,7 +72,7 @@ class Client(ClientBase):
     client_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Схемы для Booking
 class BookingBase(BaseModel):
@@ -92,14 +92,14 @@ class Booking(BookingBase):
     booking_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class BookingWithDetails(Booking):
     client: Client
     room: Room
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Схемы для Employee
 class EmployeeBase(BaseModel):
@@ -118,7 +118,7 @@ class Employee(EmployeeBase):
     employee_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Схемы для CleaningSchedule
 class CleaningScheduleBase(BaseModel):
@@ -133,13 +133,13 @@ class CleaningSchedule(CleaningScheduleBase):
     schedule_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class CleaningScheduleWithDetails(CleaningSchedule):
     employee: Employee
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Схемы для CleaningLog
 class CleaningLogBase(BaseModel):
@@ -158,14 +158,14 @@ class CleaningLog(CleaningLogBase):
     log_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class CleaningLogWithDetails(CleaningLog):
     room: Room
     employee: Employee
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Схемы для User (авторизация)
 class UserBase(BaseModel):
@@ -181,7 +181,7 @@ class User(UserBase):
     id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Схема для токена
 class Token(BaseModel):

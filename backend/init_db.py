@@ -1,275 +1,361 @@
-from sqlalchemy.orm import Session
-from database import SessionLocal, engine, Base
 import models
-import schemas
-import crud
-from datetime import date, timedelta
+from database import SessionLocal, engine
 
-# Пересоздаем таблицы
-Base.metadata.drop_all(bind=engine)
-Base.metadata.create_all(bind=engine)
-
-# Создаем сессию для заполнения данных
-db = SessionLocal()
-
-# Заполняем данные о гостинице
-hotel = schemas.HotelCreate(
-    name="Маяк",
-    total_rooms=30
-)
-db_hotel = crud.create_hotel(db, hotel)
-print(f"Создана гостиница: {db_hotel.name}, ID: {db_hotel.hotel_id}")
-
-# Создаем типы номеров
-room_types = [
-    schemas.RoomTypeCreate(name="Стандарт", capacity=2, price_per_night=3000),
-    schemas.RoomTypeCreate(name="Комфорт", capacity=2, price_per_night=4500),
-    schemas.RoomTypeCreate(name="Люкс", capacity=3, price_per_night=7000),
-    schemas.RoomTypeCreate(name="Апартаменты", capacity=4, price_per_night=10000)
-]
-
-db_room_types = []
-for room_type in room_types:
-    db_room_type = crud.create_room_type(db, room_type)
-    db_room_types.append(db_room_type)
-    print(f"Создан тип номера: {db_room_type.name}, ID: {db_room_type.type_id}")
-
-# Создаем номера для гостиницы
-rooms = []
-floor_count = 5  # 5 этажей
-rooms_per_floor = 6  # 6 номеров на этаже
-
-for floor in range(1, floor_count + 1):
-    for room_num in range(1, rooms_per_floor + 1):
-        room_number = f"{floor}0{room_num}"
-        type_id = ((floor - 1) * rooms_per_floor + room_num - 1) % len(db_room_types) + 1
+# Добавляем типы номеров
+def create_default_room_types(db):
+    print("Проверка типов номеров...")
+    
+    # Проверяем, есть ли уже типы номеров
+    existing_types = db.query(models.RoomType).all()
+    if existing_types:
+        print(f"Типы номеров уже существуют ({len(existing_types)} типов)")
+        return existing_types
         
-        # Статус "Занят" для некоторых номеров
-        status = "Занят" if room_num % 3 == 0 else "Свободен"
-        
-        room = schemas.RoomCreate(
-            hotel_id=db_hotel.hotel_id,
-            type_id=type_id,
-            floor=floor,
-            room_number=room_number,
-            status=status
+    print("Создание типов номеров...")
+    # Стандарт
+    standard = models.RoomType(
+        name="Стандарт",
+        capacity=2,
+        price_per_night=3000.0
+    )
+    db.add(standard)
+    
+    # Люкс
+    lux = models.RoomType(
+        name="Люкс",
+        capacity=3,
+        price_per_night=5000.0
+    )
+    db.add(lux)
+    
+    # Семейный
+    family = models.RoomType(
+        name="Семейный",
+        capacity=4,
+        price_per_night=6000.0
+    )
+    db.add(family)
+    
+    db.commit()
+    print("Типы номеров созданы")
+    return db.query(models.RoomType).all()
+
+# Добавляем номера
+def create_default_rooms(db, hotel_id):
+    print(f"Проверка номеров для гостиницы {hotel_id}...")
+    
+    # Проверяем, есть ли уже номера
+    existing_rooms = db.query(models.Room).filter(models.Room.hotel_id == hotel_id).all()
+    if existing_rooms:
+        print(f"Номера уже существуют ({len(existing_rooms)} номеров)")
+        return existing_rooms
+    
+    print(f"Создание номеров для гостиницы {hotel_id}...")
+    
+    # Получаем типы номеров
+    room_types = db.query(models.RoomType).all()
+    if not room_types:
+        print("Типы номеров не найдены, сначала создайте типы номеров")
+        return []
+    
+    # Номера первого этажа
+    for i in range(1, 6):
+        room = models.Room(
+            hotel_id=hotel_id,
+            type_id=room_types[0].type_id,  # Стандарт
+            floor=1,
+            room_number=f"101-{i}",
+            status="Свободен"
         )
-        db_room = crud.create_room(db, room)
-        rooms.append(db_room)
-        print(f"Создан номер: {db_room.room_number}, статус: {db_room.status}")
+        db.add(room)
+    
+    # Номера второго этажа
+    for i in range(1, 4):
+        room = models.Room(
+            hotel_id=hotel_id,
+            type_id=room_types[1].type_id,  # Люкс
+            floor=2,
+            room_number=f"201-{i}",
+            status="Свободен"
+        )
+        db.add(room)
+    
+    # Номера третьего этажа
+    for i in range(1, 3):
+        room = models.Room(
+            hotel_id=hotel_id,
+            type_id=room_types[2].type_id,  # Семейный
+            floor=3,
+            room_number=f"301-{i}",
+            status="Свободен"
+        )
+        db.add(room)
+    
+    db.commit()
+    print("Номера созданы")
+    return db.query(models.Room).all()
 
-# Создаем клиентов
-clients = [
-    schemas.ClientCreate(
-        first_name="Иван",
-        last_name="Иванов",
-        middle_name="Иванович",
-        passport_series="1234",
-        passport_number="567890",
-        date_of_birth=date(1985, 5, 15),
-        address="г. Москва, ул. Ленина, д.10, кв. 15",
-        phone="+7(900)123-45-67",
-        email="ivanov@example.com",
-        city="Москва"
-    ),
-    schemas.ClientCreate(
-        first_name="Петр",
-        last_name="Петров",
-        middle_name="Петрович",
-        passport_series="2345",
-        passport_number="678901",
-        date_of_birth=date(1990, 8, 20),
-        address="г. Санкт-Петербург, ул. Невская, д.5, кв. 42",
-        phone="+7(900)234-56-78",
-        email="petrov@example.com",
-        city="Санкт-Петербург"
-    ),
-    schemas.ClientCreate(
-        first_name="Анна",
-        last_name="Сидорова",
-        middle_name="Владимировна",
-        passport_series="3456",
-        passport_number="789012",
-        date_of_birth=date(1988, 3, 10),
-        address="г. Казань, ул. Баумана, д.7, кв. 21",
-        phone="+7(900)345-67-89",
-        email="sidorova@example.com",
-        city="Казань"
-    )
-]
+# Добавляем клиентов
+def create_default_clients(db):
+    print("Проверка клиентов...")
+    
+    # Проверяем, есть ли уже клиенты
+    existing_clients = db.query(models.Client).all()
+    if existing_clients:
+        print(f"Клиенты уже существуют ({len(existing_clients)} клиентов)")
+        return existing_clients
+    
+    print("Создание клиентов...")
+    
+    clients = [
+        models.Client(
+            first_name="Иван",
+            last_name="Петров",
+            passport_number="1234 567890",
+            city="Москва"
+        ),
+        models.Client(
+            first_name="Анна",
+            last_name="Иванова",
+            passport_number="2345 678901",
+            city="Санкт-Петербург"
+        ),
+        models.Client(
+            first_name="Сергей",
+            last_name="Сидоров",
+            passport_number="3456 789012",
+            city="Казань"
+        ),
+        models.Client(
+            first_name="Елена",
+            last_name="Смирнова",
+            passport_number="4567 890123",
+            city="Новосибирск"
+        )
+    ]
+    
+    for client in clients:
+        db.add(client)
+    
+    db.commit()
+    print("Клиенты созданы")
+    return db.query(models.Client).all()
 
-db_clients = []
-for client in clients:
-    db_client = crud.create_client(db, client)
-    db_clients.append(db_client)
-    print(f"Создан клиент: {db_client.last_name} {db_client.first_name}")
+# Добавляем сотрудников
+def create_default_employees(db, hotel_id):
+    print(f"Проверка сотрудников для гостиницы {hotel_id}...")
+    
+    # Проверяем, есть ли уже сотрудники
+    existing_employees = db.query(models.Employee).filter(models.Employee.hotel_id == hotel_id).all()
+    if existing_employees:
+        print(f"Сотрудники уже существуют ({len(existing_employees)} сотрудников)")
+        return existing_employees
+    
+    print(f"Создание сотрудников для гостиницы {hotel_id}...")
+    
+    employees = [
+        models.Employee(
+            hotel_id=hotel_id,
+            first_name="Мария",
+            last_name="Кузнецова",
+            status="Активен"
+        ),
+        models.Employee(
+            hotel_id=hotel_id,
+            first_name="Алексей",
+            last_name="Попов",
+            status="Активен"
+        ),
+        models.Employee(
+            hotel_id=hotel_id,
+            first_name="Ольга",
+            last_name="Соколова",
+            status="Активен"
+        )
+    ]
+    
+    for employee in employees:
+        db.add(employee)
+    
+    db.commit()
+    print("Сотрудники созданы")
+    return db.query(models.Employee).all()
 
-# Создаем сотрудников
-employees = [
-    schemas.EmployeeCreate(
-        hotel_id=db_hotel.hotel_id,
-        first_name="Алексей",
-        last_name="Смирнов",
-        middle_name="Дмитриевич",
-        position="Администратор",
-        phone="+7(900)111-22-33",
-        email="admin@hotel.com",
-        date_of_birth=date(1982, 7, 12),
-        hire_date=date(2018, 3, 15),
-        status="Активен"
-    ),
-    schemas.EmployeeCreate(
-        hotel_id=db_hotel.hotel_id,
-        first_name="Елена",
-        last_name="Козлова",
-        middle_name="Сергеевна",
-        position="Горничная",
-        phone="+7(900)222-33-44",
-        email="maid1@hotel.com",
-        date_of_birth=date(1975, 11, 22),
-        hire_date=date(2019, 6, 10),
-        status="Активен"
-    ),
-    schemas.EmployeeCreate(
-        hotel_id=db_hotel.hotel_id,
-        first_name="Ирина",
-        last_name="Новикова",
-        middle_name="Петровна",
-        position="Горничная",
-        phone="+7(900)333-44-55",
-        email="maid2@hotel.com",
-        date_of_birth=date(1980, 4, 5),
-        hire_date=date(2020, 2, 3),
-        status="Активен"
-    ),
-    schemas.EmployeeCreate(
-        hotel_id=db_hotel.hotel_id,
-        first_name="Сергей",
-        last_name="Кузнецов",
-        middle_name="Александрович",
-        position="Техник",
-        phone="+7(900)444-55-66",
-        email="tech@hotel.com",
-        date_of_birth=date(1978, 9, 15),
-        hire_date=date(2017, 8, 20),
-        status="Активен"
-    ),
-    schemas.EmployeeCreate(
-        hotel_id=db_hotel.hotel_id,
-        first_name="Мария",
-        last_name="Волкова",
-        middle_name="Игоревна",
-        position="Менеджер",
-        phone="+7(900)555-66-77",
-        email="manager@hotel.com",
-        date_of_birth=date(1985, 12, 3),
-        hire_date=date(2018, 10, 5),
-        status="В отпуске"
-    )
-]
+# Добавляем бронирования
+def create_default_bookings(db):
+    print("Проверка бронирований...")
+    
+    # Проверяем, есть ли уже бронирования
+    existing_bookings = db.query(models.Booking).all()
+    if existing_bookings:
+        print(f"Бронирования уже существуют ({len(existing_bookings)} бронирований)")
+        return existing_bookings
+    
+    print("Создание бронирований...")
+    
+    # Получаем клиентов
+    clients = db.query(models.Client).all()
+    if not clients:
+        print("Клиенты не найдены, сначала создайте клиентов")
+        return []
+    
+    # Получаем номера
+    rooms = db.query(models.Room).all()
+    if not rooms:
+        print("Номера не найдены, сначала создайте номера")
+        return []
+    
+    # Даты для бронирований
+    from datetime import date, timedelta
+    today = date.today()
+    tomorrow = today + timedelta(days=1)
+    next_week = today + timedelta(days=7)
+    two_weeks = today + timedelta(days=14)
+    
+    bookings = [
+        models.Booking(
+            room_id=rooms[0].room_id,
+            client_id=clients[0].client_id,
+            check_in_date=today,
+            check_out_date=tomorrow + timedelta(days=3),
+            status="Подтверждено"
+        ),
+        models.Booking(
+            room_id=rooms[1].room_id,
+            client_id=clients[1].client_id,
+            check_in_date=next_week,
+            check_out_date=next_week + timedelta(days=5),
+            status="Подтверждено"
+        ),
+        models.Booking(
+            room_id=rooms[2].room_id,
+            client_id=clients[2].client_id,
+            check_in_date=tomorrow,
+            check_out_date=tomorrow + timedelta(days=2),
+            status="Подтверждено"
+        ),
+        models.Booking(
+            room_id=rooms[3].room_id,
+            client_id=clients[3].client_id,
+            check_in_date=two_weeks,
+            check_out_date=two_weeks + timedelta(days=7),
+            status="Подтверждено"
+        )
+    ]
+    
+    for booking in bookings:
+        db.add(booking)
+        # Обновляем статус номера на "Занят" для активных бронирований
+        if booking.check_in_date <= today <= booking.check_out_date:
+            room = db.query(models.Room).filter(models.Room.room_id == booking.room_id).first()
+            if room:
+                room.status = "Занят"
+    
+    db.commit()
+    print("Бронирования созданы")
+    return db.query(models.Booking).all()
 
-db_employees = []
-for employee in employees:
-    db_employee = crud.create_employee(db, employee)
-    db_employees.append(db_employee)
-    print(f"Создан сотрудник: {db_employee.last_name} {db_employee.first_name}, должность: {db_employee.position}")
+# Добавляем записи журнала уборок
+def create_default_cleaning_logs(db):
+    print("Проверка записей журнала уборок...")
+    
+    # Проверяем, есть ли уже записи журнала уборок
+    existing_logs = db.query(models.CleaningLog).all()
+    if existing_logs:
+        print(f"Записи журнала уборок уже существуют ({len(existing_logs)} записей)")
+        return existing_logs
+    
+    print("Создание записей журнала уборок...")
+    
+    # Получаем номера и сотрудников
+    rooms = db.query(models.Room).all()
+    employees = db.query(models.Employee).all()
+    
+    if not rooms or not employees:
+        print("Номера или сотрудники не найдены, сначала создайте их")
+        return []
+    
+    # Даты для уборок
+    from datetime import date, timedelta
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    tomorrow = today + timedelta(days=1)
+    
+    logs = [
+        models.CleaningLog(
+            room_id=rooms[0].room_id,
+            employee_id=employees[0].employee_id,
+            cleaning_date=yesterday,
+            status="Завершена"
+        ),
+        models.CleaningLog(
+            room_id=rooms[1].room_id,
+            employee_id=employees[1].employee_id,
+            cleaning_date=today,
+            status="В процессе"
+        ),
+        models.CleaningLog(
+            room_id=rooms[2].room_id,
+            employee_id=employees[2].employee_id,
+            cleaning_date=today,
+            status="Ожидает"
+        ),
+        models.CleaningLog(
+            room_id=rooms[3].room_id,
+            employee_id=employees[0].employee_id,
+            cleaning_date=tomorrow,
+            status="Ожидает"
+        )
+    ]
+    
+    for log in logs:
+        db.add(log)
+    
+    db.commit()
+    print("Записи журнала уборок созданы")
+    return db.query(models.CleaningLog).all()
 
-# Создаем бронирования
-today = date.today()
-bookings = [
-    schemas.BookingCreate(
-        room_id=rooms[0].room_id,
-        client_id=db_clients[0].client_id,
-        check_in_date=today + timedelta(days=1),
-        check_out_date=today + timedelta(days=5),
-        status="Подтверждено"
-    ),
-    schemas.BookingCreate(
-        room_id=rooms[5].room_id,
-        client_id=db_clients[1].client_id,
-        check_in_date=today + timedelta(days=3),
-        check_out_date=today + timedelta(days=7),
-        status="Оплачено"
-    ),
-    schemas.BookingCreate(
-        room_id=rooms[10].room_id,
-        client_id=db_clients[2].client_id,
-        check_in_date=today - timedelta(days=2),
-        check_out_date=today + timedelta(days=2),
-        status="Подтверждено"
-    )
-]
-
-for booking in bookings:
+# Функция для инициализации базы данных тестовыми данными
+def initialize_db():
+    from database import SessionLocal, engine
+    import models
+    
+    print("Инициализация базы данных...")
+    
+    # Создаем таблицы
+    models.Base.metadata.create_all(bind=engine)
+    
+    # Открываем сессию
+    db = SessionLocal()
+    
     try:
-        db_booking = models.Booking(**booking.dict())
-        db.add(db_booking)
-        db.commit()
-        db.refresh(db_booking)
-        print(f"Создано бронирование: номер {db_booking.room_id}, клиент {db_booking.client_id}")
+        # Создаем гостиницу по умолчанию
+        hotel = db.query(models.Hotel).filter(models.Hotel.hotel_id == 1).first()
+        if not hotel:
+            print("Создание гостиницы по умолчанию...")
+            hotel = models.Hotel(hotel_id=1, name="Гостиница по умолчанию", total_rooms=50)
+            db.add(hotel)
+            db.commit()
+            print("Гостиница по умолчанию создана")
+        else:
+            print(f"Гостиница по умолчанию уже существует: {hotel.name}")
+        
+        hotel_id = hotel.hotel_id
+        
+        # Создаем остальные данные
+        create_default_room_types(db)
+        create_default_rooms(db, hotel_id)
+        create_default_clients(db)
+        create_default_employees(db, hotel_id)
+        create_default_bookings(db)
+        create_default_cleaning_logs(db)
+        
+        print("База данных успешно инициализирована")
     except Exception as e:
-        print(f"Ошибка при создании бронирования: {e}")
         db.rollback()
+        print(f"Ошибка при инициализации базы данных: {str(e)}")
+    finally:
+        db.close()
 
-# Создаем расписание уборок
-days_of_week = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
-for i, day in enumerate(days_of_week):
-    employee_id = db_employees[i % 3 + 1].employee_id  # Берем только горничных (индексы 1 и 2)
-    floor = (i % 5) + 1
-    
-    schedule = schemas.CleaningScheduleCreate(
-        employee_id=employee_id,
-        day_of_week=day,
-        floor=floor,
-        start_time="09:00:00" if i % 2 == 0 else "13:00:00",
-        end_time="13:00:00" if i % 2 == 0 else "17:00:00"
-    )
-    
-    db_schedule = crud.create_cleaning_schedule(db, schedule)
-    print(f"Создано расписание уборки: день {db_schedule.day_of_week}, этаж {db_schedule.floor}")
-
-# Создаем журнал уборок
-today = date.today()
-cleaning_logs = [
-    schemas.CleaningLogCreate(
-        room_id=rooms[2].room_id,
-        employee_id=db_employees[1].employee_id,
-        cleaning_date=today,
-        start_time="09:00:00",
-        end_time="09:30:00",
-        status="Завершена"
-    ),
-    schemas.CleaningLogCreate(
-        room_id=rooms[7].room_id,
-        employee_id=db_employees[1].employee_id,
-        cleaning_date=today,
-        start_time="10:00:00",
-        end_time="10:30:00",
-        status="Завершена"
-    ),
-    schemas.CleaningLogCreate(
-        room_id=rooms[12].room_id,
-        employee_id=db_employees[2].employee_id,
-        cleaning_date=today,
-        start_time="11:00:00",
-        end_time=None,
-        status="В процессе"
-    ),
-    schemas.CleaningLogCreate(
-        room_id=rooms[17].room_id,
-        employee_id=db_employees[2].employee_id,
-        cleaning_date=today,
-        start_time="14:00:00",
-        end_time=None,
-        status="Ожидает"
-    )
-]
-
-for log in cleaning_logs:
-    db_log = crud.create_cleaning_log(db, log)
-    print(f"Создана запись в журнале уборок: номер {db_log.room_id}, статус {db_log.status}")
-
-print("База данных успешно инициализирована!")
-
-# Закрываем сессию
-db.close() 
+if __name__ == "__main__":
+    initialize_db() 

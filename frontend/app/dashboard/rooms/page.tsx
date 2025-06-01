@@ -148,11 +148,15 @@ export default function RoomsPage() {
         status: newRoom.status
       };
       
+      console.log('Отправка запроса на создание номера:', roomData);
+      
       // Создаем номер
       const createdRoom = await roomService.createRoom(roomData);
+      console.log('Номер успешно создан:', createdRoom);
       
       // Получаем детальную информацию о созданном номере
       const roomDetails = await roomService.getRoom(createdRoom.room_id);
+      console.log('Получены детали номера:', roomDetails);
       
       // Добавляем новый номер в список
       setRooms(prevRooms => [...prevRooms, roomDetails]);
@@ -175,7 +179,11 @@ export default function RoomsPage() {
       
     } catch (err) {
       console.error('Ошибка при создании номера:', err);
-      setError('Не удалось создать новый номер');
+      if (err instanceof Error) {
+        setError(`Не удалось создать новый номер: ${err.message}`);
+      } else {
+        setError('Не удалось создать новый номер');
+      }
     }
   };
   

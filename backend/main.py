@@ -1,10 +1,19 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request, Response, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 import models, schemas, crud
 from database import engine, SessionLocal
 import uvicorn
+import logging
+import traceback
+from datetime import date, timedelta
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("uvicorn")
+logger.setLevel(logging.DEBUG)
 
 # Создание таблиц
 models.Base.metadata.create_all(bind=engine)
@@ -16,31 +25,40 @@ def create_default_hotel():
         # Проверяем, есть ли гостиница с ID 1
         hotel = db.query(models.Hotel).filter(models.Hotel.hotel_id == 1).first()
         if not hotel:
-            print("Создание гостиницы по умолчанию...")
+            logger.info("Создание гостиницы по умолчанию...")
             default_hotel = models.Hotel(hotel_id=1, name="Гостиница по умолчанию", total_rooms=50)
             db.add(default_hotel)
             db.commit()
-            print("Гостиница по умолчанию успешно создана")
+            logger.info("Гостиница по умолчанию успешно создана")
         else:
-            print(f"Гостиница по умолчанию уже существует: {hotel.name}")
+            logger.info(f"Гостиница по умолчанию уже существует: {hotel.name}")
     except Exception as e:
-        print(f"Ошибка при создании гостиницы по умолчанию: {str(e)}")
+        logger.error(f"Ошибка при создании гостиницы по умолчанию: {str(e)}")
+        logger.error(traceback.format_exc())
     finally:
         db.close()
 
 # Вызываем функцию при запуске сервера
 create_default_hotel()
 
+# Создание приложения FastAPI
 app = FastAPI(title="InnControl API", description="API для системы администрирования гостиниц")
 
-# Настройка CORS
+# Настройка CORS - правильная конфигурация для работы с фронтендом
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend URL
+    allow_origins=["http://localhost:3000"],  # URL фронтенда
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["Content-Type", "Authorization", "Accept"],
+    expose_headers=["Content-Length"],
+    max_age=600,  # Время кеширования предзапросов (в секундах)
 )
+
+# Тестовый эндпоинт для проверки CORS
+@app.get("/api-test")
+def test_api():
+    return {"message": "API работает корректно!", "cors": "настроен"}
 
 # Зависимость для получения сессии БД
 def get_db():
@@ -234,11 +252,32 @@ def delete_client(client_id: int, db: Session = Depends(get_db)):
 def read_clients_by_city(city: str, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     return crud.get_clients_by_city(db, city=city, skip=skip, limit=limit)
 
-# Эндпоинты для бронирований
+# Эндпоинт для получения бронирований из БД с обработкой ошибок и фильтрацией
 @app.get("/bookings/", response_model=List[schemas.Booking])
-def read_bookings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    bookings = crud.get_bookings(db, skip=skip, limit=limit)
-    return bookings
+def read_bookings(
+    skip: int = 0, 
+    limit: int = 100, 
+    status: Optional[str] = Query(None, description="Фильтр по статусу бронирования: Заселен, Подтверждено, Выселен, Отменено"),
+    db: Session = Depends(get_db)
+):
+    try:
+        logger.info(f"Запрос бронирований из БД: skip={skip}, limit={limit}, status={status}")
+        
+        if status:
+            # Если указан статус, фильтруем по нему
+            bookings = db.query(models.Booking).filter(models.Booking.status == status).offset(skip).limit(limit).all()
+            logger.info(f"Найдено {len(bookings)} бронирований со статусом '{status}'")
+        else:
+            # Иначе возвращаем все бронирования
+            bookings = crud.get_bookings(db, skip=skip, limit=limit)
+            logger.info(f"Успешно получено {len(bookings)} бронирований из БД")
+        
+        return bookings
+    except Exception as e:
+        logger.error(f"Ошибка при получении бронирований из БД: {str(e)}")
+        logger.error(traceback.format_exc())
+        # В случае ошибки возвращаем пустой список вместо HTTP ошибки
+        return []
 
 @app.get("/bookings/{booking_id}", response_model=schemas.BookingWithDetails)
 def read_booking(booking_id: int, db: Session = Depends(get_db)):

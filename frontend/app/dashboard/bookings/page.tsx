@@ -103,42 +103,75 @@ export default function BookingsPage() {
     const fetchBookings = async () => {
       try {
         setLoading(true);
+        setError(null);
         
-        // Получаем все бронирования с деталями
-        const bookingsData = await Promise.all(
-          (await bookingService.getAllBookings()).map(async (booking) => {
-            const bookingWithDetails = await bookingService.getBooking(booking.booking_id);
-            
-            // Получаем тип номера для расчета цены
-            const roomType = await roomService.getRoomType(bookingWithDetails.room.type_id);
-            
-            // Рассчитываем общую стоимость бронирования
-            const checkIn = new Date(booking.check_in_date);
-            const checkOut = new Date(booking.check_out_date);
-            const nights = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
-            const totalPrice = nights * roomType.price_per_night;
-            
-            // Возвращаем бронирование с деталями и ценой
-            return {
-              ...bookingWithDetails,
-              total_price: totalPrice
-            };
-          })
-        );
+        console.log('Начинаем загрузку бронирований...');
         
-        setBookings(bookingsData);
+        // Получаем все бронирования
+        const bookingsData = await bookingService.getAllBookings();
+        console.log('Получены бронирования:', bookingsData);
         
-        // Загружаем списки клиентов и типов номеров для формы создания
-        const clientsData = await clientService.getAllClients();
+        if (!bookingsData || bookingsData.length === 0) {
+          console.log('Бронирования не найдены или пустой массив');
+          setBookings([]);
+          setLoading(false);
+          return;
+        }
+        
+        // Получаем типы номеров для расчета цены
+        console.log('Загрузка типов номеров...');
         const roomTypesData = await roomService.getAllRoomTypes();
-        
-        setClients(clientsData);
+        console.log('Получены типы номеров:', roomTypesData);
         setRoomTypes(roomTypesData);
         
-        setError(null);
+        // Получаем клиентов для формы создания
+        console.log('Загрузка клиентов...');
+        const clientsData = await clientService.getAllClients();
+        console.log('Получены клиенты:', clientsData);
+        setClients(clientsData);
+        
+        // Получаем детали для каждого бронирования
+        console.log('Загрузка деталей бронирований...');
+        const bookingsWithDetails: BookingDisplay[] = [];
+        
+        for (const booking of bookingsData) {
+          try {
+            console.log(`Загрузка деталей для бронирования ${booking.booking_id}...`);
+            // Получаем детали бронирования
+            const bookingDetails = await bookingService.getBooking(booking.booking_id);
+            console.log(`Получены детали бронирования ${booking.booking_id}:`, bookingDetails);
+            
+            // Находим тип номера для расчета цены
+            const roomType = roomTypesData.find(rt => rt.type_id === bookingDetails.room.type_id);
+            
+            if (!roomType) {
+              console.error(`Не найден тип номера для номера ${bookingDetails.room.room_id}`);
+              continue;
+            }
+            
+            // Рассчитываем общую стоимость бронирования
+            const nights = calculateNights(booking.check_in_date, booking.check_out_date);
+            const totalPrice = nights * roomType.price_per_night;
+            
+            // Добавляем бронирование с деталями
+            bookingsWithDetails.push({
+              ...bookingDetails,
+              total_price: totalPrice
+            });
+          } catch (err) {
+            console.error(`Ошибка при получении деталей для бронирования ${booking.booking_id}:`, err);
+          }
+        }
+        
+        console.log(`Обработано ${bookingsWithDetails.length} из ${bookingsData.length} бронирований`);
+        setBookings(bookingsWithDetails);
       } catch (err) {
         console.error('Ошибка при загрузке бронирований:', err);
-        setError('Не удалось загрузить данные бронирований');
+        if (err instanceof Error) {
+          setError(`Не удалось загрузить данные бронирований: ${err.message}`);
+        } else {
+          setError('Не удалось загрузить данные бронирований');
+        }
       } finally {
         setLoading(false);
       }
@@ -259,21 +292,13 @@ export default function BookingsPage() {
   
   // Фильтрация бронирований
   const filteredBookings = bookings.filter(booking => {
-    const clientName = `${booking.client.first_name} ${booking.client.last_name}`.toLowerCase();
-    const roomInfo = `${booking.room.room_number}`.toLowerCase();
-    
     const matchesSearch = 
-      clientName.includes(searchTerm.toLowerCase()) ||
-      roomInfo.includes(searchTerm.toLowerCase());
+      booking.room.room_number.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      `${booking.client.first_name} ${booking.client.last_name}`.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesStatus = filterStatus ? booking.status === filterStatus : true;
     
     return matchesSearch && matchesStatus;
-  })
-  // Сортировка бронирований по дате заезда (от старых к новым)
-  .sort((a, b) => {
-    // Сравниваем даты заезда
-    return new Date(a.check_in_date).getTime() - new Date(b.check_in_date).getTime();
   });
   
   // Получение уникальных статусов для фильтра
@@ -431,9 +456,10 @@ export default function BookingsPage() {
             onChange={(e) => setFilterStatus(e.target.value)}
           >
             <option value="">Все статусы</option>
-            {statuses.map(status => (
-              <option key={status} value={status}>{status}</option>
-            ))}
+            <option value="Заселен">Заселен</option>
+            <option value="Подтверждено">Подтверждено</option>
+            <option value="Выселен">Выселен</option>
+            <option value="Отменено">Отменено</option>
           </select>
           <FaFilter className="absolute left-3 top-3 text-gray-400" />
         </div>
