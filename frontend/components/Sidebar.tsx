@@ -52,8 +52,8 @@ const Sidebar = () => {
       icon: <FaBroom className="w-5 h-5" />
     },
     {
-      name: 'История уборок',
-      path: '/dashboard/cleaning-logs',
+      name: 'Журнал уборок',
+      path: '/dashboard/cleaning/logs',
       icon: <FaHistory className="w-5 h-5" />
     }
   ];

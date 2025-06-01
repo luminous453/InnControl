@@ -35,7 +35,7 @@
 ### Запуск Backend
 1. Перейдите в директорию backend
    ```bash
-   cd InnControl/backend
+   cd backend
    ```
 
 2. Создайте и активируйте виртуальное окружение Python
@@ -74,7 +74,7 @@
 ### Запуск Frontend
 1. Перейдите в директорию frontend
    ```bash
-   cd InnControl/frontend
+   cd frontend
    ```
 
 2. Установите зависимости
