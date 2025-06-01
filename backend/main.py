@@ -9,6 +9,28 @@ import uvicorn
 # Создание таблиц
 models.Base.metadata.create_all(bind=engine)
 
+# Создание гостиницы по умолчанию, если она не существует
+def create_default_hotel():
+    db = SessionLocal()
+    try:
+        # Проверяем, есть ли гостиница с ID 1
+        hotel = db.query(models.Hotel).filter(models.Hotel.hotel_id == 1).first()
+        if not hotel:
+            print("Создание гостиницы по умолчанию...")
+            default_hotel = models.Hotel(hotel_id=1, name="Гостиница по умолчанию", total_rooms=50)
+            db.add(default_hotel)
+            db.commit()
+            print("Гостиница по умолчанию успешно создана")
+        else:
+            print(f"Гостиница по умолчанию уже существует: {hotel.name}")
+    except Exception as e:
+        print(f"Ошибка при создании гостиницы по умолчанию: {str(e)}")
+    finally:
+        db.close()
+
+# Вызываем функцию при запуске сервера
+create_default_hotel()
+
 app = FastAPI(title="InnControl API", description="API для системы администрирования гостиниц")
 
 # Настройка CORS
@@ -350,7 +372,26 @@ def read_employee(employee_id: int, db: Session = Depends(get_db)):
 
 @app.post("/employees/", response_model=schemas.Employee)
 def create_employee(employee: schemas.EmployeeCreate, db: Session = Depends(get_db)):
-    return crud.create_employee(db=db, employee=employee)
+    # Расширенное логирование
+    print(f"Попытка создать сотрудника: {employee.dict()}")
+    
+    # Проверка обязательных полей
+    if not employee.first_name or not employee.last_name:
+        raise HTTPException(status_code=400, detail="Имя и фамилия являются обязательными полями")
+    
+    # Проверка существования гостиницы
+    hotel = crud.get_hotel(db, hotel_id=employee.hotel_id)
+    if not hotel:
+        raise HTTPException(status_code=404, detail=f"Гостиница с ID {employee.hotel_id} не найдена")
+    
+    try:
+        created_employee = crud.create_employee(db=db, employee=employee)
+        print(f"Сотрудник успешно создан: {created_employee.__dict__}")
+        return created_employee
+    except Exception as e:
+        print(f"Ошибка при создании сотрудника: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка сервера при создании сотрудника: {str(e)}")
 
 @app.put("/employees/{employee_id}", response_model=schemas.Employee)
 def update_employee(employee_id: int, employee: schemas.EmployeeCreate, db: Session = Depends(get_db)):

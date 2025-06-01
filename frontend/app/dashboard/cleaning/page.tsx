@@ -134,10 +134,10 @@ export default function CleaningSchedulePage() {
                               </div>
                               <div className="flex space-x-2">
                                 <button className="text-secondary hover:text-secondary-hover">
-                                  <FaEdit />
+                                  <FaEdit className="text-xl" />
                                 </button>
                                 <button className="text-red-600 hover:text-red-800">
-                                  <FaTrash />
+                                  <FaTrash className="text-xl" />
                                 </button>
                               </div>
                             </div>

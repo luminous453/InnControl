@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FaSearch, FaFilter, FaPlus, FaEdit, FaTrash, FaCalendarAlt, FaRegCalendarCheck, FaRegCalendarTimes } from 'react-icons/fa';
+import { FaSearch, FaFilter, FaPlus, FaEdit, FaTrash, FaCalendarAlt, FaRegCalendarCheck, FaRegCalendarTimes, FaCheck } from 'react-icons/fa';
 import { bookingService, BookingWithDetails } from '@/services/bookingService';
 import { roomService, RoomType } from '@/services/roomService';
 import { clientService } from '@/services/clientService';
@@ -81,7 +81,12 @@ export default function BookingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [showModal, setShowModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [currentBooking, setCurrentBooking] = useState<BookingDisplay | null>(null);
   const [roomTypes, setRoomTypes] = useState<RoomType[]>([]);
   const [availableRooms, setAvailableRooms] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
@@ -222,7 +227,7 @@ export default function BookingsPage() {
         check_out_date: '',
         status: 'Подтверждено'
       });
-      setShowModal(false);
+      setShowAddModal(false);
     } catch (err) {
       console.error('Ошибка при создании бронирования:', err);
       setError('Не удалось создать бронирование');
@@ -264,6 +269,11 @@ export default function BookingsPage() {
     const matchesStatus = filterStatus ? booking.status === filterStatus : true;
     
     return matchesSearch && matchesStatus;
+  })
+  // Сортировка бронирований по дате заезда (от старых к новым)
+  .sort((a, b) => {
+    // Сравниваем даты заезда
+    return new Date(a.check_in_date).getTime() - new Date(b.check_in_date).getTime();
   });
   
   // Получение уникальных статусов для фильтра
@@ -293,13 +303,103 @@ export default function BookingsPage() {
     }
   };
 
+  // Функция для редактирования бронирования
+  const handleEditBooking = async () => {
+    try {
+      if (!currentBooking) return;
+      
+      // Проверяем корректность введенных данных
+      if (!currentBooking.client || !currentBooking.room || !currentBooking.check_in_date || !currentBooking.check_out_date) {
+        setError('Заполните все обязательные поля');
+        return;
+      }
+      
+      // Проверяем корректность введенных дат
+      if (!areDatesValid(currentBooking.check_in_date, currentBooking.check_out_date)) {
+        setError('Дата выезда должна быть позже даты заезда');
+        return;
+      }
+      
+      // Подготавливаем данные для отправки
+      const bookingData = {
+        client_id: currentBooking.client.client_id,
+        room_id: currentBooking.room.room_id,
+        check_in_date: currentBooking.check_in_date,
+        check_out_date: currentBooking.check_out_date,
+        status: currentBooking.status
+      };
+      
+      // Обновляем бронирование
+      await bookingService.updateBooking(currentBooking.booking_id, bookingData);
+      
+      // Получаем обновленные данные
+      const updatedBooking = await bookingService.getBooking(currentBooking.booking_id);
+      
+      // Рассчитываем цену
+      const nights = calculateNights(updatedBooking.check_in_date, updatedBooking.check_out_date);
+      const roomTypeData = await roomService.getRoomType(updatedBooking.room.type_id);
+      const totalPrice = nights * roomTypeData.price_per_night;
+      
+      // Обновляем бронирование в списке
+      setBookings(prevBookings => 
+        prevBookings.map(booking => 
+          booking.booking_id === currentBooking.booking_id 
+            ? { ...updatedBooking, total_price: totalPrice } 
+            : booking
+        )
+      );
+      
+      // Закрываем модальное окно
+      setShowEditModal(false);
+      setCurrentBooking(null);
+      
+      // Показываем сообщение об успешном обновлении
+      setSuccessMessage('Бронирование успешно обновлено');
+      setShowSuccessModal(true);
+      setTimeout(() => setShowSuccessModal(false), 3000);
+      
+    } catch (err) {
+      console.error('Ошибка при редактировании бронирования:', err);
+      setError('Не удалось обновить бронирование');
+    }
+  };
+  
+  // Функция для удаления бронирования
+  const handleDeleteBooking = async () => {
+    if (!currentBooking) return;
+    
+    try {
+      // Удаляем бронирование
+      await bookingService.deleteBooking(currentBooking.booking_id);
+      
+      // Обновляем список бронирований
+      setBookings(prevBookings => 
+        prevBookings.filter(booking => booking.booking_id !== currentBooking.booking_id)
+      );
+      
+      // Закрываем модальное окно
+      setShowDeleteModal(false);
+      setCurrentBooking(null);
+      
+      // Показываем сообщение об успешном удалении
+      setSuccessMessage('Бронирование успешно удалено');
+      setShowSuccessModal(true);
+      setTimeout(() => setShowSuccessModal(false), 3000);
+      
+    } catch (err) {
+      console.error('Ошибка при удалении бронирования:', err);
+      setError('Не удалось удалить бронирование');
+      setShowDeleteModal(false);
+    }
+  };
+
   return (
     <div>
       <div className="mb-6 flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-800">Бронирования</h2>
         <button 
           className="btn-primary flex items-center space-x-2"
-          onClick={() => setShowModal(true)}
+          onClick={() => setShowAddModal(true)}
         >
           <FaPlus />
           <span>Новое бронирование</span>
@@ -383,11 +483,23 @@ export default function BookingsPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">
-                      <button className="text-secondary hover:text-secondary-hover">
-                        <FaEdit />
+                      <button 
+                        className="text-secondary hover:text-secondary-hover"
+                        onClick={() => {
+                          setCurrentBooking(booking);
+                          setShowEditModal(true);
+                        }}
+                      >
+                        <FaEdit className="text-xl" />
                       </button>
-                      <button className="text-red-600 hover:text-red-800">
-                        <FaTrash />
+                      <button 
+                        className="text-red-600 hover:text-red-800"
+                        onClick={() => {
+                          setCurrentBooking(booking);
+                          setShowDeleteModal(true);
+                        }}
+                      >
+                        <FaTrash className="text-xl" />
                       </button>
                     </div>
                   </td>
@@ -408,7 +520,7 @@ export default function BookingsPage() {
       </div>
       
       {/* Модальное окно для создания бронирования */}
-      {showModal && (
+      {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
             <h3 className="text-xl font-semibold mb-4">Новое бронирование</h3>
@@ -506,7 +618,7 @@ export default function BookingsPage() {
             <div className="flex justify-end space-x-3 mt-6">
               <button 
                 className="btn-secondary"
-                onClick={() => setShowModal(false)}
+                onClick={() => setShowAddModal(false)}
               >
                 Отмена
               </button>
@@ -519,6 +631,125 @@ export default function BookingsPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      
+      {/* Модальное окно для редактирования бронирования */}
+      {showEditModal && currentBooking && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+            <h3 className="text-xl font-semibold mb-4">Редактировать бронирование</h3>
+            
+            <div className="mb-4">
+              <label className="label">Клиент</label>
+              <div className="px-3 py-2 border border-gray-300 rounded bg-gray-50">
+                {currentBooking.client.first_name} {currentBooking.client.last_name}
+              </div>
+            </div>
+            
+            <div className="mb-4">
+              <label className="label">Номер</label>
+              <div className="px-3 py-2 border border-gray-300 rounded bg-gray-50">
+                {currentBooking.room.room_number}
+              </div>
+            </div>
+            
+            <div className="mb-4">
+              <label className="label">Дата заезда</label>
+              <input 
+                type="date" 
+                className="input w-full" 
+                value={currentBooking.check_in_date}
+                onChange={(e) => {
+                  const newCheckInDate = e.target.value;
+                  setCurrentBooking({
+                    ...currentBooking,
+                    check_in_date: newCheckInDate,
+                    check_out_date: currentBooking.check_out_date && 
+                      new Date(currentBooking.check_out_date) <= new Date(newCheckInDate) ? 
+                      '' : currentBooking.check_out_date
+                  });
+                }}
+              />
+            </div>
+            
+            <div className="mb-4">
+              <label className="label">Дата выезда</label>
+              <input 
+                type="date" 
+                className="input w-full" 
+                value={currentBooking.check_out_date}
+                min={currentBooking.check_in_date}
+                onChange={(e) => setCurrentBooking({...currentBooking, check_out_date: e.target.value})}
+              />
+            </div>
+            
+            <div className="mb-4">
+              <label className="label">Статус</label>
+              <select 
+                className="select w-full"
+                value={currentBooking.status}
+                onChange={(e) => setCurrentBooking({...currentBooking, status: e.target.value})}
+              >
+                <option value="Подтверждено">Подтверждено</option>
+                <option value="Заселен">Заселен</option>
+                <option value="Выселен">Выселен</option>
+                <option value="Отменено">Отменено</option>
+              </select>
+            </div>
+            
+            <div className="flex justify-end space-x-3 mt-6">
+              <button 
+                className="btn-secondary"
+                onClick={() => {
+                  setShowEditModal(false);
+                  setCurrentBooking(null);
+                }}
+              >
+                Отмена
+              </button>
+              <button 
+                className="btn-primary"
+                onClick={handleEditBooking}
+                disabled={!currentBooking.check_in_date || !currentBooking.check_out_date}
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Модальное окно для подтверждения удаления */}
+      {showDeleteModal && currentBooking && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+            <h3 className="text-xl font-semibold mb-4">Подтверждение удаления</h3>
+            <p className="mb-6">Вы действительно хотите удалить бронирование номера {currentBooking.room.room_number} для клиента {currentBooking.client.first_name} {currentBooking.client.last_name}?</p>
+            
+            <div className="flex justify-end space-x-3">
+              <button 
+                className="btn-secondary"
+                onClick={() => setShowDeleteModal(false)}
+              >
+                Отмена
+              </button>
+              <button 
+                className="btn-danger"
+                onClick={handleDeleteBooking}
+              >
+                Удалить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Модальное окно успешного действия */}
+      {showSuccessModal && (
+        <div className="fixed bottom-4 right-4 bg-green-100 text-green-800 p-4 rounded-lg shadow-lg z-50 flex items-center">
+          <FaCheck className="mr-2" />
+          <span>{successMessage}</span>
         </div>
       )}
     </div>

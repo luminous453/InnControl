@@ -3,10 +3,10 @@
 import { useState, useEffect } from 'react';
 import { FaUserTie, FaPlus, FaEdit, FaTrash, FaCheck, FaTimes } from 'react-icons/fa';
 import { employeeService, Employee as ApiEmployee } from '@/services/employeeService';
+import { cleaningService } from '@/services/cleaningService';
 
 // Расширенный интерфейс сотрудника для отображения
 interface EmployeeDisplay extends ApiEmployee {
-  position: string; // Дополнительное поле для отображения
   cleaning_count?: number;
 }
 
@@ -16,16 +16,15 @@ export default function EmployeesPage() {
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<EmployeeDisplay | null>(null);
   const [newEmployee, setNewEmployee] = useState({
     first_name: '',
     last_name: '',
-    position: 'Горничная',
     hotel_id: 1
   });
-  
-  // Позиции сотрудников (в реальном проекте должны загружаться с API)
-  const positions = ['Администратор', 'Горничная', 'Консьерж', 'Технический специалист', 'Менеджер'];
   
   // Загрузка данных с API
   useEffect(() => {
@@ -34,17 +33,31 @@ export default function EmployeesPage() {
         setLoading(true);
         const data = await employeeService.getAllEmployees();
         
-        // Преобразуем в формат для отображения
-        // В реальном проекте информация о должности должна приходить с API
-        const displayData = data.map(emp => ({
-          ...emp,
-          position: emp.employee_id % 5 === 0 ? 'Менеджер' : 
-                    emp.employee_id % 4 === 0 ? 'Технический специалист' : 
-                    emp.employee_id % 3 === 0 ? 'Консьерж' : 
-                    emp.employee_id % 2 === 0 ? 'Администратор' : 'Горничная'
-        }));
+        // Загружаем количество уборок для каждого сотрудника
+        const employeesWithCleaningCounts = await Promise.all(
+          data.map(async (emp) => {
+            try {
+              // Получаем журнал уборок для сотрудника
+              const cleaningLogs = await cleaningService.getCleaningLogsByEmployee(emp.employee_id);
+              
+              // Считаем только завершенные уборки
+              const completedCleanings = cleaningLogs.filter(log => log.status === 'Завершена').length;
+              
+              return {
+                ...emp,
+                cleaning_count: completedCleanings
+              };
+            } catch (err) {
+              console.error(`Ошибка при получении уборок для сотрудника ${emp.employee_id}:`, err);
+              return {
+                ...emp,
+                cleaning_count: 0
+              };
+            }
+          })
+        );
         
-        setEmployees(displayData);
+        setEmployees(employeesWithCleaningCounts);
         setError(null);
       } catch (err) {
         console.error('Ошибка при загрузке сотрудников:', err);
@@ -60,6 +73,13 @@ export default function EmployeesPage() {
   // Функция для создания нового сотрудника
   const handleCreateEmployee = async () => {
     try {
+      // Проверяем наличие обязательных полей
+      if (!newEmployee.first_name || !newEmployee.last_name) {
+        setError('Пожалуйста, заполните имя и фамилию сотрудника');
+        return;
+      }
+
+      // Подготавливаем данные сотрудника
       const employeeData = {
         hotel_id: newEmployee.hotel_id,
         first_name: newEmployee.first_name,
@@ -67,25 +87,34 @@ export default function EmployeesPage() {
         status: 'Активен'
       };
       
-      const createdEmployee = await employeeService.createEmployee(employeeData);
+      console.log('Отправляем данные сотрудника:', employeeData);
       
-      // Добавляем созданного сотрудника в список с дополнительным полем position
+      // Отправляем запрос на создание сотрудника
+      const createdEmployee = await employeeService.createEmployee(employeeData);
+      console.log('Получен ответ от сервера:', createdEmployee);
+      
+      // Добавляем созданного сотрудника в список
       setEmployees(prev => [...prev, {
         ...createdEmployee,
-        position: newEmployee.position
+        cleaning_count: 0
       }]);
       
       // Сбрасываем форму и закрываем модальное окно
       setNewEmployee({
         first_name: '',
         last_name: '',
-        position: 'Горничная',
         hotel_id: 1
       });
       setShowModal(false);
+      setError(null); // Сбрасываем ошибку при успешном создании
     } catch (err) {
       console.error('Ошибка при создании сотрудника:', err);
-      setError('Не удалось создать сотрудника');
+      // Более подробная информация об ошибке
+      if (err instanceof Error) {
+        setError(`Не удалось создать сотрудника: ${err.message}`);
+      } else {
+        setError('Не удалось создать сотрудника. Проверьте соединение с сервером.');
+      }
     }
   };
 
@@ -101,6 +130,12 @@ export default function EmployeesPage() {
           emp.employee_id === id ? { ...emp, status } : emp
         )
       );
+
+      // Если статус изменен на "Уволен", показываем сообщение об успехе
+      if (status === 'Уволен') {
+        setShowSuccessModal(true);
+        setTimeout(() => setShowSuccessModal(false), 3000); // Скрываем через 3 секунды
+      }
     } catch (err) {
       console.error('Ошибка при обновлении статуса:', err);
       setError('Не удалось обновить статус сотрудника');
@@ -143,16 +178,30 @@ export default function EmployeesPage() {
     setShowEditModal(true);
   };
   
+  // Функция для открытия модального окна подтверждения увольнения
+  const openDeleteConfirmation = (id: number) => {
+    setSelectedEmployeeId(id);
+    setShowDeleteModal(true);
+  };
+  
   // Функция для удаления сотрудника
-  const handleDeleteEmployee = async (id: number) => {
+  const handleDeleteEmployee = async () => {
+    if (!selectedEmployeeId) return;
+    
     try {
-      await employeeService.deleteEmployee(id);
+      await employeeService.deleteEmployee(selectedEmployeeId);
       
       // Удаляем сотрудника из списка
-      setEmployees(prev => prev.filter(emp => emp.employee_id !== id));
+      setEmployees(prev => prev.filter(emp => emp.employee_id !== selectedEmployeeId));
+      
+      // Закрываем модальное окно подтверждения и показываем сообщение об успехе
+      setShowDeleteModal(false);
+      setShowSuccessModal(true);
+      setTimeout(() => setShowSuccessModal(false), 3000); // Скрываем через 3 секунды
     } catch (err) {
       console.error('Ошибка при удалении сотрудника:', err);
       setError('Не удалось удалить сотрудника');
+      setShowDeleteModal(false);
     }
   };
 
@@ -204,7 +253,6 @@ export default function EmployeesPage() {
                     >
                       <option value="Активен">Активен</option>
                       <option value="В отпуске">В отпуске</option>
-                      <option value="Уволен">Уволен</option>
                     </select>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">{employee.cleaning_count || 0}</td>
@@ -214,7 +262,7 @@ export default function EmployeesPage() {
                         className="text-secondary hover:text-secondary-hover"
                         onClick={() => openEditModal(employee)}
                       >
-                        <FaEdit />
+                        <FaEdit className="text-xl" />
                       </button>
                       {employee.status === 'Активен' ? (
                         <button 
@@ -235,10 +283,10 @@ export default function EmployeesPage() {
                       )}
                       <button 
                         className="text-red-600 hover:text-red-800"
-                        onClick={() => handleDeleteEmployee(employee.employee_id)}
+                        onClick={() => openDeleteConfirmation(employee.employee_id)}
                         title="Удалить сотрудника"
                       >
-                        <FaTrash />
+                        <FaTrash className="text-xl" />
                       </button>
                     </div>
                   </td>
@@ -282,19 +330,6 @@ export default function EmployeesPage() {
                 value={newEmployee.last_name}
                 onChange={(e) => setNewEmployee({...newEmployee, last_name: e.target.value})}
               />
-            </div>
-            
-            <div className="mb-4">
-              <label className="label">Должность</label>
-              <select 
-                className="select w-full"
-                value={newEmployee.position}
-                onChange={(e) => setNewEmployee({...newEmployee, position: e.target.value})}
-              >
-                {positions.map(position => (
-                  <option key={position} value={position}>{position}</option>
-                ))}
-              </select>
             </div>
             
             <div className="flex justify-end space-x-3 mt-6">
@@ -343,19 +378,6 @@ export default function EmployeesPage() {
             </div>
             
             <div className="mb-4">
-              <label className="label">Должность</label>
-              <select 
-                className="select w-full"
-                value={editingEmployee.position}
-                onChange={(e) => setEditingEmployee({...editingEmployee, position: e.target.value})}
-              >
-                {positions.map(position => (
-                  <option key={position} value={position}>{position}</option>
-                ))}
-              </select>
-            </div>
-            
-            <div className="mb-4">
               <label className="label">Статус</label>
               <select 
                 className="select w-full"
@@ -364,7 +386,6 @@ export default function EmployeesPage() {
               >
                 <option value="Активен">Активен</option>
                 <option value="В отпуске">В отпуске</option>
-                <option value="Уволен">Уволен</option>
               </select>
             </div>
             
@@ -387,6 +408,39 @@ export default function EmployeesPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      
+      {/* Модальное окно подтверждения увольнения сотрудника */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+            <h3 className="text-xl font-semibold mb-4">Подтверждение</h3>
+            <p className="mb-6">Вы уверены, что хотите уволить выбранного сотрудника?</p>
+            
+            <div className="flex justify-end space-x-3">
+              <button 
+                className="btn-secondary"
+                onClick={() => setShowDeleteModal(false)}
+              >
+                Отмена
+              </button>
+              <button 
+                className="btn-danger"
+                onClick={handleDeleteEmployee}
+              >
+                Уволить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Модальное окно успешного увольнения сотрудника */}
+      {showSuccessModal && (
+        <div className="fixed bottom-4 right-4 bg-green-100 text-green-800 p-4 rounded-lg shadow-lg z-50 flex items-center">
+          <FaCheck className="mr-2" />
+          <span>Сотрудник успешно уволен</span>
         </div>
       )}
     </div>

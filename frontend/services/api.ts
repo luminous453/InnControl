@@ -9,6 +9,7 @@ async function fetchApi<T>(
 ): Promise<T> {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
   };
 
   const config: RequestInit = {
@@ -20,9 +21,12 @@ async function fetchApi<T>(
   };
 
   try {
-    console.log(`API запрос: ${method} ${API_URL}${endpoint}`);
+    console.log(`API запрос: ${method} ${API_URL}${endpoint}`, body ? JSON.stringify(body) : 'без тела');
     
     const response = await fetch(`${API_URL}${endpoint}`, config);
+    
+    // Выводим детальную информацию о статусе ответа
+    console.log(`Статус ответа: ${response.status} ${response.statusText}`);
     
     if (!response.ok) {
       console.error(`API ошибка: ${response.status} ${response.statusText}`);
@@ -34,6 +38,16 @@ async function fetchApi<T>(
         errorMessage = errorData.detail || errorMessage;
       } catch (parseError) {
         console.error('Не удалось прочитать тело ошибки:', parseError);
+        // Пробуем получить текст ошибки
+        try {
+          const errorText = await response.text();
+          console.error('Текст ошибки:', errorText);
+          if (errorText) {
+            errorMessage += ` - ${errorText}`;
+          }
+        } catch (textError) {
+          console.error('Не удалось прочитать текст ошибки:', textError);
+        }
       }
       
       throw new Error(errorMessage);

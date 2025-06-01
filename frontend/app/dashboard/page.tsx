@@ -30,33 +30,73 @@ export default function DashboardPage() {
         setLoading(true);
         setError(null);
         
-        // Сначала получаем список всех гостиниц
-        const hotels = await hotelService.getAllHotels();
+        // Добавляем больше проверок и логирования
+        console.log('Начинаем загрузку данных панели управления...');
         
-        // Если нет гостиниц, показываем ошибку
-        if (!hotels || hotels.length === 0) {
-          setError('В базе данных нет гостиниц. Пожалуйста, добавьте хотя бы одну гостиницу.');
-          setLoading(false);
-          return;
+        try {
+          // Сначала получаем список всех гостиниц
+          console.log('Загрузка списка гостиниц...');
+          const hotels = await hotelService.getAllHotels();
+          console.log('Получены гостиницы:', hotels);
+          
+          // Если нет гостиниц, показываем ошибку
+          if (!hotels || hotels.length === 0) {
+            setError('В базе данных нет гостиниц. Пожалуйста, добавьте хотя бы одну гостиницу.');
+            setLoading(false);
+            return;
+          }
+          
+          // Берем ID первой гостиницы в списке
+          const hotelId = hotels[0].hotel_id;
+          console.log(`Используем гостиницу с ID=${hotelId}`);
+          
+          // Загружаем статистику
+          console.log('Загрузка статистики...');
+          try {
+            const stats = await dashboardService.getDashboardStats(hotelId);
+            console.log('Получена статистика:', stats);
+            setStatsData(stats);
+          } catch (statsError) {
+            console.error('Ошибка при загрузке статистики:', statsError);
+            // Продолжаем загрузку других данных, даже если статистика не загрузилась
+          }
+          
+          // Загружаем последние бронирования
+          console.log('Загрузка последних бронирований...');
+          try {
+            const bookings = await dashboardService.getRecentBookings();
+            console.log('Получены бронирования:', bookings);
+            setRecentBookings(bookings);
+          } catch (bookingsError) {
+            console.error('Ошибка при загрузке бронирований:', bookingsError);
+            // Продолжаем загрузку, даже если бронирования не загрузились
+          }
+          
+          // Загружаем уборки на сегодня
+          console.log('Загрузка уборок на сегодня...');
+          try {
+            const cleanings = await dashboardService.getTodayCleanings();
+            console.log('Получены уборки:', cleanings);
+            setTodayCleanings(cleanings);
+          } catch (cleaningsError) {
+            console.error('Ошибка при загрузке уборок:', cleaningsError);
+            // Продолжаем работу даже если уборки не загрузились
+          }
+          
+        } catch (err) {
+          console.error('Общая ошибка при загрузке данных:', err);
+          if (err instanceof Error) {
+            if (err.message.includes('Failed to fetch')) {
+              setError('Не удалось подключиться к API серверу. Пожалуйста, убедитесь, что бэкенд запущен.');
+            } else {
+              setError(`Ошибка при загрузке данных: ${err.message}`);
+            }
+          } else {
+            setError('Ошибка при загрузке данных. Пожалуйста, проверьте работу сервера API и подключение к базе данных.');
+          }
         }
-        
-        // Берем ID первой гостиницы в списке
-        const hotelId = hotels[0].hotel_id;
-        console.log(`Используем гостиницу с ID=${hotelId}`);
-        
-        // Загружаем статистику
-        const stats = await dashboardService.getDashboardStats(hotelId);
-        setStatsData(stats);
-        
-        // Загружаем последние бронирования
-        const bookings = await dashboardService.getRecentBookings();
-        setRecentBookings(bookings);
-        
-        // Загружаем уборки на сегодня
-        const cleanings = await dashboardService.getTodayCleanings();
-        setTodayCleanings(cleanings);
       } catch (err) {
-        console.error('Ошибка при загрузке данных:', err);
+        console.error('Критическая ошибка при загрузке данных:', err);
         
         // Показываем пользователю детали ошибки
         if (err instanceof Error) {
@@ -153,6 +193,12 @@ export default function DashboardPage() {
             <li>Проблема с API-запросами</li>
           </ul>
         </div>
+        <button 
+          className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          onClick={() => window.location.reload()}
+        >
+          Попробовать снова
+        </button>
       </div>
     );
   }

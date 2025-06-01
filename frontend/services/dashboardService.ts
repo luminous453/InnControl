@@ -41,9 +41,11 @@ export const dashboardService = {
       
       // Получаем базовую статистику по гостинице
       try {
+        console.log('Начинаем запрос статистики гостиницы...');
         const hotelStats = await hotelService.getHotelStatistics(hotelId);
         console.log('Получена статистика гостиницы:', hotelStats);
         
+        console.log('Начинаем запрос всех бронирований...');
         // Получаем все бронирования
         const bookings = await bookingService.getAllBookings();
         console.log(`Получено ${bookings.length} бронирований`);
@@ -54,6 +56,7 @@ export const dashboardService = {
         );
         console.log(`Из них активных: ${activeBookings.length}`);
         
+        console.log('Начинаем запрос всех клиентов...');
         // Получаем всех клиентов
         const clients = await clientService.getAllClients();
         console.log(`Получено ${clients.length} клиентов`);
@@ -61,14 +64,21 @@ export const dashboardService = {
         // Фиксированное значение для среднего рейтинга (в будущем можно добавить функционал отзывов)
         const averageRating = 4.7;
         
-        return {
+        const result = {
           ...hotelStats,
           totalBookings: activeBookings.length,
           totalClients: clients.length,
           averageRating
         };
+        
+        console.log('Итоговая статистика для главной страницы:', result);
+        return result;
       } catch (error) {
         console.error('Ошибка при получении статистики гостиницы:', error);
+        if (error instanceof Error) {
+          console.error(`Детали ошибки: ${error.message}`);
+          console.error(`Стек вызовов: ${error.stack}`);
+        }
         throw error;
       }
     } catch (error) {

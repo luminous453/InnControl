@@ -207,17 +207,6 @@ export default function ReportsPage() {
               <FaCalendarAlt className="absolute left-3 top-3 text-gray-400" />
             </div>
           </div>
-          
-          <div className="flex items-end">
-            <button 
-              className="btn-secondary w-full flex justify-center items-center space-x-2"
-              onClick={loadFinancialData}
-              disabled={loading || !startDate || !endDate}
-            >
-              <FaSearch />
-              <span>{loading ? 'Загрузка...' : 'Сформировать отчет'}</span>
-            </button>
-          </div>
         </div>
       </div>
       
@@ -330,7 +319,7 @@ export default function ReportsPage() {
         <h3 className="text-xl font-semibold text-gray-800 mb-4">Информация</h3>
         <div className="bg-white p-4 rounded-lg shadow">
           <p>В этом разделе вы можете формировать финансовые отчеты по бронированиям за выбранный период.</p>
-          <p className="mt-2">Для создания отчета выберите начальную и конечную даты и нажмите кнопку "Сформировать отчет".</p>
+          <p className="mt-2">Для создания отчета выберите начальную и конечную даты. Отчет сформируется автоматически.</p>
           <p className="mt-2">Для экспорта отчета в PDF нажмите кнопку "Экспорт отчета".</p>
         </div>
       </div>

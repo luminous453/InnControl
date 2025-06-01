@@ -68,6 +68,13 @@ export default function ClientsPage() {
   // Функция для создания нового клиента
   const handleCreateClient = async () => {
     try {
+      // Проверка формата паспортных данных
+      const passportRegex = /^\d{4}\s\d{6}$/;
+      if (!passportRegex.test(newClient.passport_number)) {
+        setError('Неверный формат паспорта. Используйте формат: 0000 000000');
+        return;
+      }
+
       const clientData = {
         first_name: newClient.first_name,
         last_name: newClient.last_name,
@@ -91,6 +98,7 @@ export default function ClientsPage() {
         city: 'Москва'
       });
       setShowModal(false);
+      setError(null); // Сбрасываем ошибку при успешном создании
     } catch (err) {
       console.error('Ошибка при создании клиента:', err);
       setError('Не удалось создать клиента');
@@ -102,6 +110,13 @@ export default function ClientsPage() {
     if (!editingClient) return;
     
     try {
+      // Проверка формата паспортных данных
+      const passportRegex = /^\d{4}\s\d{6}$/;
+      if (!passportRegex.test(editingClient.passport_number)) {
+        setError('Неверный формат паспорта. Используйте формат: 0000 000000');
+        return;
+      }
+      
       const clientData = {
         first_name: editingClient.first_name,
         last_name: editingClient.last_name,
@@ -121,6 +136,7 @@ export default function ClientsPage() {
       // Закрываем модальное окно
       setEditingClient(null);
       setShowEditModal(false);
+      setError(null); // Сбрасываем ошибку при успешном редактировании
     } catch (err) {
       console.error('Ошибка при редактировании клиента:', err);
       setError('Не удалось обновить данные клиента');
@@ -235,16 +251,16 @@ export default function ClientsPage() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">
                       <button 
-                        className="text-secondary hover:text-secondary-hover"
+                        className="text-blue-600 hover:text-blue-800"
                         onClick={() => openEditModal(client)}
                       >
-                        <FaEdit />
+                        <FaEdit className="text-xl" />
                       </button>
                       <button 
                         className="text-red-600 hover:text-red-800"
                         onClick={() => handleDeleteClient(client.client_id)}
                       >
-                        <FaTrash />
+                        <FaTrash className="text-xl" />
                       </button>
                     </div>
                   </td>
@@ -296,9 +312,17 @@ export default function ClientsPage() {
                 type="text" 
                 className="input w-full" 
                 value={newClient.passport_number}
-                onChange={(e) => setNewClient({...newClient, passport_number: e.target.value})}
+                onChange={(e) => {
+                  // Форматирование ввода паспорта: 0000 000000
+                  let value = e.target.value.replace(/\D/g, ''); // Удаляем все нецифровые символы
+                  if (value.length > 4) {
+                    value = value.slice(0, 4) + ' ' + value.slice(4, 10);
+                  }
+                  setNewClient({...newClient, passport_number: value});
+                }}
                 placeholder="0000 000000"
               />
+              <p className="text-xs text-gray-500 mt-1">Формат: 0000 000000 (серия и номер)</p>
             </div>
             
             <div className="mb-4">
@@ -362,8 +386,16 @@ export default function ClientsPage() {
                 type="text" 
                 className="input w-full" 
                 value={editingClient.passport_number}
-                onChange={(e) => setEditingClient({...editingClient, passport_number: e.target.value})}
+                onChange={(e) => {
+                  // Форматирование ввода паспорта: 0000 000000
+                  let value = e.target.value.replace(/\D/g, ''); // Удаляем все нецифровые символы
+                  if (value.length > 4) {
+                    value = value.slice(0, 4) + ' ' + value.slice(4, 10);
+                  }
+                  setEditingClient({...editingClient, passport_number: value});
+                }}
               />
+              <p className="text-xs text-gray-500 mt-1">Формат: 0000 000000 (серия и номер)</p>
             </div>
             
             <div className="mb-4">
