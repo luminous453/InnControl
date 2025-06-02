@@ -99,7 +99,6 @@ from datetime import date
 class RoomStatus(str, enum.Enum):
     AVAILABLE = "Свободен"
     OCCUPIED = "Занят"
-    CLEANING = "Уборка"
     MAINTENANCE = "Техобслуживание"
 
 # Перечисление для дней недели
@@ -156,7 +155,6 @@ class Room(Base):
     hotel = relationship("Hotel", back_populates="rooms")
     room_type = relationship("RoomType", back_populates="rooms")
     bookings = relationship("Booking", back_populates="room")
-    cleaning_logs = relationship("CleaningLog", back_populates="room")
 
 # Модель клиента
 class Client(Base):
@@ -218,22 +216,10 @@ class CleaningLog(Base):
     __tablename__ = "cleaning_logs"
 
     log_id = Column(Integer, primary_key=True, index=True)
-    room_id = Column(Integer, ForeignKey("rooms.room_id"))
+    floor_id = Column(Integer)
     employee_id = Column(Integer, ForeignKey("employees.employee_id"))
     cleaning_date = Column(Date, default=date.today)
     status = Column(String(50), default="Не начато")
     
     # Отношения
-    room = relationship("Room", back_populates="cleaning_logs")
-    employee = relationship("Employee", back_populates="cleaning_logs")
-
-# Модель пользователя (для авторизации)
-class User(Base):
-    __tablename__ = "users"
-
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True)
-    email = Column(String, unique=True, index=True)
-    hashed_password = Column(String)
-    is_active = Column(Boolean, default=True)
-    is_admin = Column(Boolean, default=False) 
+    employee = relationship("Employee", back_populates="cleaning_logs") 

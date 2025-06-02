@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FaSearch, FaFilter, FaPlus, FaEdit, FaTrash, FaUser, FaIdCard, FaCity } from 'react-icons/fa';
+import { FaSearch, FaFilter, FaPlus, FaEdit, FaTrash, FaUser, FaIdCard, FaCity, FaCheck } from 'react-icons/fa';
 import { clientService, Client as ApiClient } from '@/services/clientService';
 import { bookingService } from '@/services/bookingService';
 
@@ -18,7 +18,11 @@ export default function ClientsPage() {
   const [filterCity, setFilterCity] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editingClient, setEditingClient] = useState<ClientDisplay | null>(null);
+  const [currentClient, setCurrentClient] = useState<ClientDisplay | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const [newClient, setNewClient] = useState({
     first_name: '',
     last_name: '',
@@ -149,13 +153,30 @@ export default function ClientsPage() {
     setShowEditModal(true);
   };
   
+  // Функция для открытия модального окна удаления
+  const openDeleteModal = (client: ClientDisplay) => {
+    setCurrentClient(client);
+    setShowDeleteModal(true);
+  };
+  
   // Функция для удаления клиента
-  const handleDeleteClient = async (id: number) => {
+  const handleDeleteClient = async () => {
     try {
-      await clientService.deleteClient(id);
+      if (!currentClient) return;
+      
+      await clientService.deleteClient(currentClient.client_id);
       
       // Удаляем клиента из списка
-      setClients(prev => prev.filter(client => client.client_id !== id));
+      setClients(prev => prev.filter(client => client.client_id !== currentClient.client_id));
+      
+      // Закрываем модальное окно
+      setShowDeleteModal(false);
+      setCurrentClient(null);
+      
+      // Показываем сообщение об успешном удалении
+      setSuccessMessage('Клиент успешно удален');
+      setShowSuccessModal(true);
+      setTimeout(() => setShowSuccessModal(false), 3000);
     } catch (err) {
       console.error('Ошибка при удалении клиента:', err);
       setError('Не удалось удалить клиента');
@@ -251,14 +272,14 @@ export default function ClientsPage() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">
                       <button 
-                        className="text-blue-600 hover:text-blue-800"
+                        className="text-secondary hover:text-secondary-hover"
                         onClick={() => openEditModal(client)}
                       >
                         <FaEdit className="text-xl" />
                       </button>
                       <button 
                         className="text-red-600 hover:text-red-800"
-                        onClick={() => handleDeleteClient(client.client_id)}
+                        onClick={() => openDeleteModal(client)}
                       >
                         <FaTrash className="text-xl" />
                       </button>
@@ -427,6 +448,39 @@ export default function ClientsPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      
+      {/* Модальное окно для подтверждения удаления */}
+      {showDeleteModal && currentClient && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+            <h3 className="text-xl font-semibold mb-4">Подтверждение удаления</h3>
+            <p className="mb-6">Вы уверены что хотите удалить выбранного клиента?</p>
+            
+            <div className="flex justify-end space-x-3">
+              <button 
+                className="btn-secondary"
+                onClick={() => setShowDeleteModal(false)}
+              >
+                Отмена
+              </button>
+              <button 
+                className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
+                onClick={handleDeleteClient}
+              >
+                Удалить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Модальное окно успешного действия */}
+      {showSuccessModal && (
+        <div className="fixed bottom-4 right-4 bg-green-100 text-green-800 p-4 rounded-lg shadow-lg z-50 flex items-center">
+          <FaCheck className="mr-2" />
+          <span>{successMessage}</span>
         </div>
       )}
     </div>

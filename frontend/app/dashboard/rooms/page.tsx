@@ -106,28 +106,8 @@ export default function RoomsPage() {
     switch(status) {
       case 'Свободен': return 'bg-green-100 text-green-800';
       case 'Занят': return 'bg-red-100 text-red-800';
-      case 'Уборка': return 'bg-yellow-100 text-yellow-800';
       case 'Техобслуживание': return 'bg-gray-100 text-gray-800';
       default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-  
-  // Функция для изменения статуса номера
-  const handleStatusChange = async (roomId: number, newStatus: string) => {
-    try {
-      setError(null);
-      const statusUpdate: RoomStatusUpdate = { status: newStatus };
-      await roomService.updateRoomStatus(roomId, statusUpdate);
-      
-      // Обновление списка номеров
-      setRooms(prevRooms => 
-        prevRooms.map(room => 
-          room.room_id === roomId ? { ...room, status: newStatus } : room
-        )
-      );
-    } catch (err) {
-      console.error('Ошибка при изменении статуса номера:', err);
-      setError('Не удалось изменить статус номера');
     }
   };
   
@@ -152,7 +132,7 @@ export default function RoomsPage() {
         type_id: newRoom.type_id,
         room_number: newRoom.room_number,
         floor: newRoom.floor,
-        status: newRoom.status
+        status: 'Свободен' // Статус всегда устанавливается как "Свободен"
       };
       
       console.log('Отправка запроса на создание номера:', roomData);
@@ -209,6 +189,7 @@ export default function RoomsPage() {
         type_id: currentRoom.room_type.type_id,
         room_number: currentRoom.room_number,
         floor: currentRoom.floor,
+        // Сохраняем текущий статус, чтобы он не изменился при редактировании других полей
         status: currentRoom.status
       };
       
@@ -476,16 +457,10 @@ export default function RoomsPage() {
             
             <div className="mb-4">
               <label className="label">Статус</label>
-              <select 
-                className="select w-full"
-                value={newRoom.status}
-                onChange={(e) => setNewRoom({...newRoom, status: e.target.value})}
-              >
-                <option value="Свободен">Свободен</option>
-                <option value="Занят">Занят</option>
-                <option value="Уборка">Уборка</option>
-                <option value="Техобслуживание">Техобслуживание</option>
-              </select>
+              <div className="p-3 bg-gray-50 rounded border border-gray-200">
+                <p className="text-sm text-gray-600">Статус номера устанавливается автоматически на основе бронирований.</p>
+                <p className="text-sm text-gray-600 mt-1">При создании номера статус будет "Свободен".</p>
+              </div>
             </div>
             
             <div className="flex justify-end space-x-3 mt-6">
@@ -582,16 +557,11 @@ export default function RoomsPage() {
             
             <div className="mb-4">
               <label className="label">Статус</label>
-              <select 
-                className="select w-full"
-                value={currentRoom.status}
-                onChange={(e) => setCurrentRoom({...currentRoom, status: e.target.value})}
-              >
-                <option value="Свободен">Свободен</option>
-                <option value="Занят">Занят</option>
-                <option value="Уборка">Уборка</option>
-                <option value="Техобслуживание">Техобслуживание</option>
-              </select>
+              <div className="p-3 bg-gray-50 rounded border border-gray-200">
+                <p className="text-sm text-gray-600">Текущий статус: <span className={`font-medium ${currentRoom.status === 'Свободен' ? 'text-green-600' : currentRoom.status === 'Занят' ? 'text-red-600' : 'text-gray-600'}`}>{currentRoom.status}</span></p>
+                <p className="text-sm text-gray-600 mt-1">Статус номера обновляется автоматически на основе бронирований.</p>
+                <p className="text-sm text-gray-600 mt-1">Техобслуживание можно выставить через автоматизированную систему.</p>
+              </div>
             </div>
             
             <div className="flex justify-end space-x-3 mt-6">

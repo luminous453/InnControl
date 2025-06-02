@@ -2,7 +2,30 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from datetime import date, datetime
 
-# Схемы для Hotel
+# Пользователи (для авторизации)
+class UserBase(BaseModel):
+    username: str
+    email: Optional[str] = None
+    is_active: bool = True
+    is_admin: bool = False
+
+class UserCreate(UserBase):
+    password: str
+
+class User(UserBase):
+    id: int
+
+    class Config:
+        orm_mode = True
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    username: Optional[str] = None
+
+# Схемы для гостиниц
 class HotelBase(BaseModel):
     name: str
     total_rooms: int
@@ -14,9 +37,9 @@ class Hotel(HotelBase):
     hotel_id: int
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
-# Схемы для RoomType
+# Схемы для типов номеров
 class RoomTypeBase(BaseModel):
     name: str
     capacity: int
@@ -29,9 +52,9 @@ class RoomType(RoomTypeBase):
     type_id: int
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
-# Схемы для Room
+# Схемы для номеров
 class RoomBase(BaseModel):
     hotel_id: int
     type_id: int
@@ -42,23 +65,17 @@ class RoomBase(BaseModel):
 class RoomCreate(RoomBase):
     pass
 
-class RoomStatusUpdate(BaseModel):
-    status: str
-
 class Room(RoomBase):
     room_id: int
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 class RoomWithDetails(Room):
-    room_type: RoomType
     hotel: Hotel
+    room_type: RoomType
 
-    class Config:
-        from_attributes = True
-
-# Схемы для Client
+# Схемы для клиентов
 class ClientBase(BaseModel):
     first_name: str
     last_name: str
@@ -72,9 +89,9 @@ class Client(ClientBase):
     client_id: int
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
-# Схемы для Booking
+# Схемы для бронирований
 class BookingBase(BaseModel):
     room_id: int
     client_id: int
@@ -85,44 +102,41 @@ class BookingBase(BaseModel):
 class BookingCreate(BookingBase):
     pass
 
-class BookingStatusUpdate(BaseModel):
-    status: str
-
 class Booking(BookingBase):
     booking_id: int
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 class BookingWithDetails(Booking):
-    client: Client
     room: Room
+    client: Client
 
-    class Config:
-        from_attributes = True
+class BookingStatusUpdate(BaseModel):
+    status: str
 
-# Схемы для Employee
+# Схемы для сотрудников
 class EmployeeBase(BaseModel):
     hotel_id: int
     first_name: str
     last_name: str
-    status: str
+    status: str = "Активен"
 
 class EmployeeCreate(EmployeeBase):
     pass
-
-class EmployeeStatusUpdate(BaseModel):
-    status: str
 
 class Employee(EmployeeBase):
     employee_id: int
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
-# Схемы для CleaningSchedule
+class EmployeeStatusUpdate(BaseModel):
+    status: str
+
+# Схемы для расписания уборок
 class CleaningScheduleBase(BaseModel):
-    employee_id: Optional[int] = None
+    employee_id: int
     floor: int
     day_of_week: str
 
@@ -133,60 +147,32 @@ class CleaningSchedule(CleaningScheduleBase):
     schedule_id: int
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 class CleaningScheduleWithDetails(CleaningSchedule):
     employee: Employee
 
-    class Config:
-        from_attributes = True
-
-# Схемы для CleaningLog
+# Схемы для журнала уборок
 class CleaningLogBase(BaseModel):
-    room_id: int
+    floor_id: int
     employee_id: int
-    cleaning_date: date = Field(default_factory=date.today)
-    status: str = "Не начато"
+    cleaning_date: date
+    status: Optional[str] = "Не начата"
 
 class CleaningLogCreate(CleaningLogBase):
     pass
-
-class CleaningLogStatusUpdate(BaseModel):
-    status: str
 
 class CleaningLog(CleaningLogBase):
     log_id: int
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 class CleaningLogWithDetails(CleaningLog):
-    room: Room
     employee: Employee
 
-    class Config:
-        from_attributes = True
+class CleaningLogStatusUpdate(BaseModel):
+    status: str
 
-# Схемы для User (авторизация)
-class UserBase(BaseModel):
-    username: str
-    email: str
-    is_active: bool = True
-    is_admin: bool = False
-
-class UserCreate(UserBase):
-    password: str
-
-class User(UserBase):
-    id: int
-
-    class Config:
-        from_attributes = True
-
-# Схема для токена
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
-class TokenData(BaseModel):
-    username: Optional[str] = None 
+class RoomStatusUpdate(BaseModel):
+    status: str 

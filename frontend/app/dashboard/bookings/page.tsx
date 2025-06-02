@@ -42,20 +42,6 @@ const calculateTotal = (booking: BookingDisplay): number => {
   return booking.total_price;
 };
 
-// Функция для обновления статуса бронирования
-const handleStatusChange = async (bookingId: number, newStatus: string) => {
-  try {
-    const statusUpdate = { status: newStatus };
-    await bookingService.updateBookingStatus(bookingId, statusUpdate);
-    
-    // В реальном приложении здесь должно быть обновление состояния
-    window.location.reload(); // Временное решение для обновления UI
-  } catch (err) {
-    console.error('Ошибка при изменении статуса бронирования:', err);
-    alert('Не удалось изменить статус бронирования');
-  }
-};
-
 // Функция для проверки корректности дат
 const areDatesValid = (checkInDate: string, checkOutDate: string): boolean => {
   try {
@@ -72,6 +58,31 @@ const areDatesValid = (checkInDate: string, checkOutDate: string): boolean => {
   } catch (err) {
     console.error('Ошибка при проверке дат:', err);
     return false;
+  }
+};
+
+// Функция для определения статуса бронирования на основе дат
+const determineBookingStatus = (checkInDate: string, checkOutDate: string): string => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Сбрасываем время для корректного сравнения
+    
+    const checkIn = new Date(checkInDate);
+    checkIn.setHours(0, 0, 0, 0);
+    
+    const checkOut = new Date(checkOutDate);
+    checkOut.setHours(0, 0, 0, 0);
+    
+    if (checkOut < today) {
+      return 'Выселен'; // Дата выезда прошла
+    } else if (checkIn <= today && today <= checkOut) {
+      return 'Заселен'; // Сегодня между датой заезда и выезда (включительно)
+    } else {
+      return 'Подтверждено'; // Дата заезда в будущем
+    }
+  } catch (err) {
+    console.error('Ошибка при определении статуса бронирования:', err);
+    return 'Подтверждено'; // По умолчанию
   }
 };
 
@@ -94,8 +105,7 @@ export default function BookingsPage() {
     client_id: 0,
     room_id: 0,
     check_in_date: '',
-    check_out_date: '',
-    status: 'Подтверждено'
+    check_out_date: ''
   });
   
   // Загрузка данных с API
@@ -152,6 +162,23 @@ export default function BookingsPage() {
             // Рассчитываем общую стоимость бронирования
             const nights = calculateNights(booking.check_in_date, booking.check_out_date);
             const totalPrice = nights * roomType.price_per_night;
+            
+            // Определяем актуальный статус бронирования на основе дат
+            const currentStatus = determineBookingStatus(
+              booking.check_in_date,
+              booking.check_out_date
+            );
+            
+            // Обновляем статус в API, если он отличается от текущего
+            if (currentStatus !== booking.status) {
+              try {
+                await bookingService.updateBookingStatus(booking.booking_id, { status: currentStatus });
+                console.log(`Статус бронирования ${booking.booking_id} обновлен с "${booking.status}" на "${currentStatus}"`);
+                bookingDetails.status = currentStatus;
+              } catch (err) {
+                console.error(`Ошибка при обновлении статуса бронирования ${booking.booking_id}:`, err);
+              }
+            }
             
             // Добавляем бронирование с деталями
             bookingsWithDetails.push({
@@ -234,12 +261,45 @@ export default function BookingsPage() {
         return;
       }
       
+      // Проверяем, не забронировал ли клиент уже номер на эти даты
+      const clientBookings = await bookingService.getBookingsByClient(newBooking.client_id);
+      
+      // Фильтруем бронирования, которые накладываются на выбранный период
+      const overlappingBookings = clientBookings.filter(booking => {
+        // Преобразуем строки дат в объекты Date
+        const bookingStart = new Date(booking.check_in_date);
+        const bookingEnd = new Date(booking.check_out_date);
+        const newBookingStart = new Date(newBooking.check_in_date);
+        const newBookingEnd = new Date(newBooking.check_out_date);
+        
+        // Проверяем, есть ли пересечения дат
+        return (
+          // Новый период начинается во время существующего бронирования
+          (newBookingStart >= bookingStart && newBookingStart < bookingEnd) ||
+          // Новый период заканчивается во время существующего бронирования
+          (newBookingEnd > bookingStart && newBookingEnd <= bookingEnd) ||
+          // Новый период полностью включает существующее бронирование
+          (newBookingStart <= bookingStart && newBookingEnd >= bookingEnd)
+        );
+      });
+      
+      if (overlappingBookings.length > 0) {
+        setError('Этот клиент уже забронировал номер на указанные даты');
+        return;
+      }
+      
+      // Определяем статус бронирования на основе дат
+      const status = determineBookingStatus(
+        newBooking.check_in_date,
+        newBooking.check_out_date
+      );
+      
       const bookingData = {
         client_id: newBooking.client_id,
         room_id: newBooking.room_id,
         check_in_date: newBooking.check_in_date,
         check_out_date: newBooking.check_out_date,
-        status: newBooking.status
+        status: status
       };
       
       const createdBooking = await bookingService.createBooking(bookingData);
@@ -269,8 +329,7 @@ export default function BookingsPage() {
         client_id: 0,
         room_id: 0,
         check_in_date: '',
-        check_out_date: '',
-        status: 'Подтверждено'
+        check_out_date: ''
       });
       setShowAddModal(false);
     } catch (err) {
@@ -343,30 +402,80 @@ export default function BookingsPage() {
     }
   };
 
+  // Функция для открытия модального окна редактирования
+  const openEditModal = (booking: BookingDisplay) => {
+    setCurrentBooking(booking);
+    setNewBooking({
+      client_id: booking.client.client_id,
+      room_id: booking.room.room_id,
+      check_in_date: booking.check_in_date,
+      check_out_date: booking.check_out_date
+    });
+    setShowEditModal(true);
+  };
+
   // Функция для редактирования бронирования
   const handleEditBooking = async () => {
     try {
       if (!currentBooking) return;
       
-      // Проверяем корректность введенных данных
-      if (!currentBooking.client || !currentBooking.room || !currentBooking.check_in_date || !currentBooking.check_out_date) {
-        setError('Заполните все обязательные поля');
+      if (!newBooking.check_in_date || !newBooking.check_out_date || !newBooking.client_id || !newBooking.room_id) {
+        setError('Заполните все поля');
         return;
       }
       
       // Проверяем корректность введенных дат
-      if (!areDatesValid(currentBooking.check_in_date, currentBooking.check_out_date)) {
+      if (!areDatesValid(newBooking.check_in_date, newBooking.check_out_date)) {
         setError('Дата выезда должна быть позже даты заезда');
         return;
       }
       
-      // Подготавливаем данные для отправки
+      // Проверяем, не забронировал ли клиент уже номер на эти даты
+      const clientBookings = await bookingService.getBookingsByClient(newBooking.client_id);
+      
+      // Фильтруем бронирования, которые накладываются на выбранный период
+      // и исключаем текущее бронирование из проверки
+      const overlappingBookings = clientBookings.filter(booking => {
+        // Пропускаем текущее редактируемое бронирование
+        if (booking.booking_id === currentBooking.booking_id) {
+          return false;
+        }
+        
+        // Преобразуем строки дат в объекты Date
+        const bookingStart = new Date(booking.check_in_date);
+        const bookingEnd = new Date(booking.check_out_date);
+        const newBookingStart = new Date(newBooking.check_in_date);
+        const newBookingEnd = new Date(newBooking.check_out_date);
+        
+        // Проверяем, есть ли пересечения дат
+        return (
+          // Новый период начинается во время существующего бронирования
+          (newBookingStart >= bookingStart && newBookingStart < bookingEnd) ||
+          // Новый период заканчивается во время существующего бронирования
+          (newBookingEnd > bookingStart && newBookingEnd <= bookingEnd) ||
+          // Новый период полностью включает существующее бронирование
+          (newBookingStart <= bookingStart && newBookingEnd >= bookingEnd)
+        );
+      });
+      
+      if (overlappingBookings.length > 0) {
+        setError('Этот клиент уже забронировал другой номер на указанные даты');
+        return;
+      }
+      
+      // Определяем статус бронирования на основе дат
+      const status = determineBookingStatus(
+        newBooking.check_in_date,
+        newBooking.check_out_date
+      );
+      
       const bookingData = {
-        client_id: currentBooking.client.client_id,
-        room_id: currentBooking.room.room_id,
-        check_in_date: currentBooking.check_in_date,
-        check_out_date: currentBooking.check_out_date,
-        status: currentBooking.status
+        booking_id: currentBooking.booking_id,
+        client_id: newBooking.client_id,
+        room_id: newBooking.room_id,
+        check_in_date: newBooking.check_in_date,
+        check_out_date: newBooking.check_out_date,
+        status: status
       };
       
       // Обновляем бронирование
@@ -433,6 +542,18 @@ export default function BookingsPage() {
     }
   };
 
+  // Обновляем форму нового бронирования при создании модального окна
+  useEffect(() => {
+    if (showAddModal) {
+      setNewBooking({
+        client_id: 0,
+        room_id: 0,
+        check_in_date: '',
+        check_out_date: ''
+      });
+    }
+  }, [showAddModal]);
+
   return (
     <div>
       <div className="mb-6 flex justify-between items-center">
@@ -446,7 +567,9 @@ export default function BookingsPage() {
         </button>
       </div>
       
-      {error && (
+      {error && 
+        !error.includes('Этот клиент уже забронировал') && 
+        !error.includes('Дата выезда должна быть позже даты заезда') && (
         <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
           {error}
         </div>
@@ -474,7 +597,6 @@ export default function BookingsPage() {
             <option value="Заселен">Заселен</option>
             <option value="Подтверждено">Подтверждено</option>
             <option value="Выселен">Выселен</option>
-            <option value="Отменено">Отменено</option>
           </select>
           <FaFilter className="absolute left-3 top-3 text-gray-400" />
         </div>
@@ -511,24 +633,17 @@ export default function BookingsPage() {
                   <td className="px-6 py-4 whitespace-nowrap">{calculateNights(booking.check_in_date, booking.check_out_date)}</td>
                   <td className="px-6 py-4 whitespace-nowrap">{calculateTotal(booking)} ₽</td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <select
-                      className="px-3 py-2 text-sm font-medium rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
-                      value={booking.status}
-                      onChange={(e) => handleStatusChange(booking.booking_id, e.target.value)}
-                    >
-                      <option value="Подтверждено">Подтверждено</option>
-                      <option value="Заселен">Заселен</option>
-                      <option value="Выселен">Выселен</option>
-                      <option value="Отменено">Отменено</option>
-                    </select>
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(booking.status)}`}>
+                      {getStatusIcon(booking.status)}
+                      {booking.status}
+                    </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">
                       <button 
                         className="text-secondary hover:text-secondary-hover"
                         onClick={() => {
-                          setCurrentBooking(booking);
-                          setShowEditModal(true);
+                          openEditModal(booking);
                         }}
                       >
                         <FaEdit className="text-xl" />
@@ -565,6 +680,12 @@ export default function BookingsPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
             <h3 className="text-xl font-semibold mb-4">Новое бронирование</h3>
+            
+            {error && (
+              <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
+                {error}
+              </div>
+            )}
             
             <div className="mb-4">
               <label className="label">Клиент</label>
@@ -638,18 +759,6 @@ export default function BookingsPage() {
               )}
             </div>
             
-            <div className="mb-4">
-              <label className="label">Статус</label>
-              <select 
-                className="select w-full"
-                value={newBooking.status}
-                onChange={(e) => setNewBooking({...newBooking, status: e.target.value})}
-              >
-                <option value="Подтверждено">Подтверждено</option>
-                <option value="Активно">Активно</option>
-              </select>
-            </div>
-            
             {newBooking.room_id > 0 && (
               <div className="mb-4 p-3 bg-gray-100 rounded-md">
                 <p className="font-semibold">Предварительная стоимость: {calculatePreviewPrice()} ₽</p>
@@ -681,6 +790,12 @@ export default function BookingsPage() {
           <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
             <h3 className="text-xl font-semibold mb-4">Редактировать бронирование</h3>
             
+            {error && (
+              <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
+                {error}
+              </div>
+            )}
+            
             <div className="mb-4">
               <label className="label">Клиент</label>
               <div className="px-3 py-2 border border-gray-300 rounded bg-gray-50">
@@ -710,6 +825,14 @@ export default function BookingsPage() {
                       new Date(currentBooking.check_out_date) <= new Date(newCheckInDate) ? 
                       '' : currentBooking.check_out_date
                   });
+                  // Также обновляем newBooking для синхронизации
+                  setNewBooking({
+                    ...newBooking,
+                    check_in_date: newCheckInDate,
+                    check_out_date: currentBooking.check_out_date && 
+                      new Date(currentBooking.check_out_date) <= new Date(newCheckInDate) ? 
+                      '' : currentBooking.check_out_date
+                  });
                 }}
               />
             </div>
@@ -721,22 +844,13 @@ export default function BookingsPage() {
                 className="input w-full" 
                 value={currentBooking.check_out_date}
                 min={currentBooking.check_in_date}
-                onChange={(e) => setCurrentBooking({...currentBooking, check_out_date: e.target.value})}
+                onChange={(e) => {
+                  const newCheckOutDate = e.target.value;
+                  setCurrentBooking({...currentBooking, check_out_date: newCheckOutDate});
+                  // Также обновляем newBooking
+                  setNewBooking({...newBooking, check_out_date: newCheckOutDate});
+                }}
               />
-            </div>
-            
-            <div className="mb-4">
-              <label className="label">Статус</label>
-              <select 
-                className="select w-full"
-                value={currentBooking.status}
-                onChange={(e) => setCurrentBooking({...currentBooking, status: e.target.value})}
-              >
-                <option value="Подтверждено">Подтверждено</option>
-                <option value="Заселен">Заселен</option>
-                <option value="Выселен">Выселен</option>
-                <option value="Отменено">Отменено</option>
-              </select>
             </div>
             
             <div className="flex justify-end space-x-3 mt-6">
@@ -776,7 +890,7 @@ export default function BookingsPage() {
                 Отмена
               </button>
               <button 
-                className="btn-danger"
+                className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
                 onClick={handleDeleteBooking}
               >
                 Удалить

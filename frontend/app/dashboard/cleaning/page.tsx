@@ -6,6 +6,55 @@ import { cleaningService, CleaningScheduleWithDetails } from '@/services/cleanin
 import { employeeService, Employee } from '@/services/employeeService';
 import { roomService } from '@/services/roomService';
 
+// Функция для обработки удаления записей сотрудника из журнала уборок
+const handleDeleteScheduleAndCleaningLogs = async (scheduleId: number, employeeId: number, floor: number, dayOfWeek: string): Promise<boolean> => {
+  try {
+    // Сначала удаляем расписание
+    await cleaningService.deleteCleaningSchedule(scheduleId);
+    
+    // Получаем все будущие записи журнала уборок для этого сотрудника
+    const logsForEmployee = await cleaningService.getCleaningLogsByEmployee(employeeId);
+    
+    // Получаем текущую дату
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Выбираем будущие записи со статусом "Не начата" и соответствующие удаленному расписанию
+    const logsToDelete = logsForEmployee.filter(log => {
+      // Преобразуем дату лога
+      const logDate = new Date(log.cleaning_date);
+      logDate.setHours(0, 0, 0, 0);
+      
+      // Получаем день недели для этой даты
+      const logDayOfWeek = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'][logDate.getDay()];
+      
+      return log.status === 'Не начата' && // Только записи со статусом "Не начата"
+             logDate > today && // Только будущие даты
+             log.floor_id === floor && // Тот же этаж
+             logDayOfWeek === dayOfWeek; // Тот же день недели
+    });
+    
+    // Удаляем найденные записи
+    for (const log of logsToDelete) {
+      try {
+        await cleaningService.deleteCleaningLog(log.log_id);
+        console.log(`Удалена запись уборки ID ${log.log_id} для этажа ${log.floor_id} на ${log.cleaning_date}`);
+      } catch (err) {
+        console.error(`Ошибка при удалении записи уборки ID ${log.log_id}:`, err);
+      }
+    }
+    
+    if (logsToDelete.length > 0) {
+      console.log(`Удалено ${logsToDelete.length} будущих записей уборок для сотрудника ID ${employeeId}`);
+    }
+    
+    return true;
+  } catch (err) {
+    console.error('Ошибка при удалении расписания и связанных записей:', err);
+    return false;
+  }
+};
+
 export default function CleaningSchedulePage() {
   const [schedules, setSchedules] = useState<CleaningScheduleWithDetails[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -237,17 +286,26 @@ export default function CleaningSchedulePage() {
     try {
       if (!currentSchedule) return;
       
-      // Удаляем расписание
-      await cleaningService.deleteCleaningSchedule(currentSchedule.schedule_id);
-      
-      // Обновляем список
-      setSchedules(prev => 
-        prev.filter(schedule => schedule.schedule_id !== currentSchedule.schedule_id)
+      // Используем функцию для удаления расписания и связанных записей уборок
+      const success = await handleDeleteScheduleAndCleaningLogs(
+        currentSchedule.schedule_id,
+        currentSchedule.employee.employee_id,
+        currentSchedule.floor,
+        currentSchedule.day_of_week
       );
       
-      // Закрываем модальное окно
-      setShowDeleteModal(false);
-      setCurrentSchedule(null);
+      if (success) {
+        // Обновляем список
+        setSchedules(prev => 
+          prev.filter(schedule => schedule.schedule_id !== currentSchedule.schedule_id)
+        );
+        
+        // Закрываем модальное окно
+        setShowDeleteModal(false);
+        setCurrentSchedule(null);
+      } else {
+        setError('Не удалось удалить расписание');
+      }
     } catch (err) {
       console.error('Ошибка при удалении расписания:', err);
       setError('Не удалось удалить расписание');
@@ -318,7 +376,7 @@ export default function CleaningSchedulePage() {
                                 </div>
                                 <div className="flex space-x-2">
                                   <button 
-                                    className="text-secondary hover:text-secondary-hover"
+                                    className="text-secondary hover:text-secondary-hover flex items-center cursor-pointer"
                                     onClick={() => {
                                       setCurrentSchedule(schedule);
                                       setShowEditModal(true);
@@ -327,7 +385,7 @@ export default function CleaningSchedulePage() {
                                     <FaEdit className="text-xl" />
                                   </button>
                                   <button 
-                                    className="text-red-600 hover:text-red-800"
+                                    className="text-red-600 hover:text-red-800 flex items-center cursor-pointer"
                                     onClick={() => {
                                       setCurrentSchedule(schedule);
                                       setShowDeleteModal(true);

@@ -27,6 +27,167 @@ export default function ReportsPage() {
   const [totalBookings, setTotalBookings] = useState(0);
   const [averageBookingValue, setAverageBookingValue] = useState(0);
 
+  // Добавляем стили для скрытия боковой панели при печати/экспорте в PDF
+  useEffect(() => {
+    // Создаем элемент стиля
+    const style = document.createElement('style');
+    style.textContent = `
+      @media print {
+        nav, aside, .sidebar, .navbar, header, footer, button, .print-hide {
+          display: none !important;
+        }
+        body {
+          padding: 0 !important;
+          margin: 0 !important;
+          overflow: visible !important;
+          width: 100% !important;
+        }
+        html {
+          overflow: visible !important;
+        }
+        main {
+          margin-left: 0 !important;
+          padding: 0 !important;
+          width: 100% !important;
+          overflow: visible !important;
+          display: block !important;
+        }
+        .print-only {
+          display: block !important;
+        }
+        .container, .content, .report {
+          width: 100% !important;
+          margin: 0 !important;
+          padding: 0.5cm !important;
+          overflow: visible !important;
+        }
+        h1, h2, h3, h4 {
+          margin-top: 0.5cm !important;
+        }
+        h1 {
+          font-size: 1.5rem !important;
+        }
+        h2 {
+          font-size: 1.2rem !important;
+        }
+        @page {
+          size: A4 landscape;
+          margin: 1cm;
+        }
+        table {
+          page-break-inside: auto;
+          width: 100% !important;
+          font-size: 0.9rem !important;
+          table-layout: fixed !important;
+          display: table !important;
+          visibility: visible !important;
+        }
+        tr {
+          page-break-inside: avoid;
+          page-break-after: auto;
+          display: table-row !important;
+          visibility: visible !important;
+        }
+        th, td {
+          padding: 0.25cm 0.2cm !important;
+          word-wrap: break-word !important;
+          max-width: 150px !important;
+          display: table-cell !important;
+          visibility: visible !important;
+        }
+        thead {
+          display: table-header-group !important;
+          visibility: visible !important;
+        }
+        tbody {
+          display: table-row-group !important;
+          visibility: visible !important;
+        }
+        tfoot {
+          display: table-footer-group !important;
+          visibility: visible !important;
+        }
+        .whitespace-nowrap {
+          white-space: normal !important;
+        }
+        .overflow-hidden {
+          overflow: visible !important;
+        }
+        .print-title {
+          text-align: center;
+          font-size: 1.2rem;
+          margin-bottom: 0.5cm !important;
+        }
+        .print-table-wrapper {
+          overflow: visible !important;
+          display: block !important;
+          width: 100% !important;
+          margin-top: 0.5cm !important;
+        }
+        .mb-6, .mb-4 {
+          margin-bottom: 0.3cm !important;
+        }
+        .grid {
+          display: block !important;
+        }
+        .print-summary {
+          margin: 0.3cm 0;
+          display: flex;
+          justify-content: space-around;
+          border-top: 1px solid #eaeaea;
+          border-bottom: 1px solid #eaeaea;
+          padding: 0.2cm 0;
+        }
+        .print-summary p {
+          margin: 0;
+        }
+        * {
+          overflow: visible !important;
+        }
+        div[class*="overflow"] {
+          overflow: visible !important;
+        }
+        .print-financial-table {
+          display: table !important;
+          width: 100% !important;
+          border-collapse: collapse !important;
+        }
+        .print-financial-table th,
+        .print-financial-table td {
+          border: 1px solid #ddd !important;
+          padding: 0.3cm !important;
+          text-align: left !important;
+        }
+        .print-table-container {
+          display: block !important; 
+          margin: 0.5cm 0 !important;
+          page-break-inside: avoid !important;
+          width: 100% !important;
+        }
+        /* Скрываем информационный блок */
+        .info-section {
+          display: none !important;
+        }
+        /* Специально скрываем кнопку "Выйти" */
+        a[href="/"] {
+          display: none !important;
+        }
+        /* Перенос общего дохода на следующую страницу */
+        .print-page-break {
+          page-break-before: always !important;
+        }
+      }
+    `;
+    
+    // Добавляем стиль в head документа
+    document.head.appendChild(style);
+    
+    // Удаляем стиль при размонтировании компонента
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
+
   // Функция для загрузки данных с указанными фильтрами
   const loadFinancialData = async () => {
     if (!startDate || !endDate) {
@@ -172,6 +333,25 @@ export default function ReportsPage() {
         </button>
       </div>
       
+      {/* Заголовок для печатной версии */}
+      <div className="hidden print-only print-title">
+        <h1 className="text-center font-bold">InnControl Система управления гостиницей</h1>
+        <h2 className="text-center">Финансовый отчет</h2>
+        {startDate && endDate && (
+          <p className="text-center">
+            Период: {formatDate(startDate)} - {formatDate(endDate)}
+          </p>
+        )}
+        
+        {financialData.length > 0 && (
+          <div className="print-summary">
+            <p><strong>Общий доход:</strong> {formatCurrency(totalIncome)}</p>
+            <p><strong>Количество бронирований:</strong> {totalBookings}</p>
+            <p><strong>Средняя стоимость бронирования:</strong> {formatCurrency(averageBookingValue)}</p>
+          </div>
+        )}
+      </div>
+      
       {error && (
         <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
           {error}
@@ -238,8 +418,8 @@ export default function ReportsPage() {
             </div>
           </div>
           
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
+          <div className="bg-white rounded-lg shadow overflow-hidden print-table-wrapper">
+            <table className="min-w-full divide-y divide-gray-200 print-financial-table">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
@@ -315,7 +495,7 @@ export default function ReportsPage() {
         </div>
       )}
       
-      <div className="mt-8">
+      <div className="mt-8 info-section">
         <h3 className="text-xl font-semibold text-gray-800 mb-4">Информация</h3>
         <div className="bg-white p-4 rounded-lg shadow">
           <p>В этом разделе вы можете формировать финансовые отчеты по бронированиям за выбранный период.</p>
@@ -323,6 +503,46 @@ export default function ReportsPage() {
           <p className="mt-2">Для экспорта отчета в PDF нажмите кнопку "Экспорт отчета".</p>
         </div>
       </div>
+      
+      {/* Таблица специально для печати */}
+      {financialData.length > 0 && (
+        <div className="print-table-container hidden print-only print-page-break">
+          <table className="print-financial-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Клиент</th>
+                <th>Номер</th>
+                <th>Дата заезда</th>
+                <th>Дата выезда</th>
+                <th>Ночей</th>
+                <th>Цена за ночь</th>
+                <th>Сумма</th>
+              </tr>
+            </thead>
+            <tbody>
+              {financialData.map((booking) => (
+                <tr key={`print-${booking.booking_id}`}>
+                  <td>{booking.booking_id}</td>
+                  <td>{booking.client_name}</td>
+                  <td>{booking.room_number}</td>
+                  <td>{formatDate(booking.check_in_date)}</td>
+                  <td>{formatDate(booking.check_out_date)}</td>
+                  <td>{booking.nights}</td>
+                  <td>{formatCurrency(booking.price_per_night)}</td>
+                  <td>{formatCurrency(booking.total_amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={7} style={{textAlign: 'right'}}><strong>Итого:</strong></td>
+                <td><strong>{formatCurrency(totalIncome)}</strong></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
     </div>
   );
 } 

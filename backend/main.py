@@ -8,7 +8,9 @@ from database import engine, SessionLocal
 import uvicorn
 import logging
 import traceback
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+import auth
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -566,20 +568,13 @@ def read_cleaning_log(log_id: int, db: Session = Depends(get_db)):
 
 @app.post("/cleaning-logs/", response_model=schemas.CleaningLog)
 def create_cleaning_log(log: schemas.CleaningLogCreate, db: Session = Depends(get_db)):
-    # Получаем информацию о номере, чтобы узнать этаж
-    room = crud.get_room(db, room_id=log.room_id)
-    if not room:
-        raise HTTPException(status_code=404, detail="Номер не найден")
-    
     # Проверяем, нет ли уже записей по этому этажу на эту дату
-    existing_logs = crud.get_cleaning_logs_by_date(db, cleaning_date=log.cleaning_date)
-    for existing_log in existing_logs:
-        existing_room = crud.get_room(db, room_id=existing_log.room_id)
-        if existing_room and existing_room.floor == room.floor:
-            raise HTTPException(
-                status_code=400, 
-                detail="На этот этаж уже назначен другой сотрудник в этот день"
-            )
+    existing_logs = crud.get_cleaning_logs_by_date_and_floor(db, cleaning_date=log.cleaning_date, floor_id=log.floor_id)
+    if existing_logs:
+        raise HTTPException(
+            status_code=400, 
+            detail="На этот этаж уже назначен другой сотрудник в этот день"
+        )
     
     return crud.create_cleaning_log(db=db, log=log)
 
@@ -590,7 +585,7 @@ def update_cleaning_log(log_id: int, log: schemas.CleaningLogCreate, db: Session
         raise HTTPException(status_code=404, detail="Запись не найдена")
     
     # Обновляем поля журнала уборок
-    db_log.room_id = log.room_id
+    db_log.floor_id = log.floor_id
     db_log.employee_id = log.employee_id
     db_log.cleaning_date = log.cleaning_date
     db_log.status = log.status
@@ -649,6 +644,29 @@ def read_cleaning_logs_by_date(date: str, db: Session = Depends(get_db)):
 @app.post("/cleaning-logs/{log_id}/complete/", response_model=schemas.CleaningLog)
 def complete_cleaning_log(log_id: int, db: Session = Depends(get_db)):
     return crud.complete_cleaning(db, log_id=log_id)
+
+# Эндпоинт для авторизации и получения JWT токена
+@app.post("/token")
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    # Хардкодированная проверка для admin/admin
+    if form_data.username == "admin" and form_data.password == "admin":
+        # Создаем данные для токена
+        access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = auth.create_access_token(
+            data={"sub": form_data.username}, expires_delta=access_token_expires
+        )
+        return {"access_token": access_token, "token_type": "bearer"}
+    
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Неверное имя пользователя или пароль",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+# Эндпоинт для проверки текущего пользователя
+@app.get("/users/me", response_model=schemas.User)
+async def read_users_me(current_user: schemas.User = Depends(auth.get_current_active_user)):
+    return current_user
 
 # Простой эндпоинт для проверки работы API
 @app.get("/")

@@ -30,19 +30,18 @@ export interface CleaningScheduleCreate {
 
 export interface CleaningLog {
   log_id: number;
-  room_id: number;
+  floor_id: number;
   employee_id: number;
   cleaning_date: string;
   status: string;
 }
 
 export interface CleaningLogWithDetails extends CleaningLog {
-  room: Room;
   employee: Employee;
 }
 
 export interface CleaningLogCreate {
-  room_id: number;
+  floor_id: number;
   employee_id: number;
   cleaning_date: string;
   status?: string;
@@ -117,11 +116,6 @@ export const cleaningService = {
   // Удалить журнал уборки
   deleteCleaningLog: (id: number) => {
     return api.delete<CleaningLog>(`/cleaning-logs/${id}`);
-  },
-  
-  // Получить журналы уборок по номеру
-  getCleaningLogsByRoom: (roomId: number) => {
-    return api.get<CleaningLog[]>(`/rooms/${roomId}/cleaning-logs/`);
   },
   
   // Получить журналы уборок по сотруднику

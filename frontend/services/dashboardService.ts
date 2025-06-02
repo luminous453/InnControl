@@ -50,9 +50,9 @@ export const dashboardService = {
         const bookings = await bookingService.getAllBookings();
         console.log(`Получено ${bookings.length} бронирований`);
         
-        // Получаем активные бронирования (со статусом "Подтверждено" или "Оплачено")
+        // Получаем активные бронирования (со статусом "Подтверждено" или "Заселен")
         const activeBookings = bookings.filter(
-          booking => booking.status === 'Подтверждено' || booking.status === 'Оплачено'
+          booking => booking.status === 'Подтверждено' || booking.status === 'Заселен'
         );
         console.log(`Из них активных: ${activeBookings.length}`);
         

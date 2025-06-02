@@ -7,43 +7,17 @@ from passlib.context import CryptContext
 # Настройка шифрования паролей
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# Функции для работы с пользователями
-def get_user(db: Session, user_id: int):
-    return db.query(models.User).filter(models.User.id == user_id).first()
-
-def get_user_by_username(db: Session, username: str):
-    return db.query(models.User).filter(models.User.username == username).first()
-
-def get_user_by_email(db: Session, email: str):
-    return db.query(models.User).filter(models.User.email == email).first()
-
-def get_users(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.User).offset(skip).limit(limit).all()
-
-def create_user(db: Session, user: schemas.UserCreate):
-    hashed_password = pwd_context.hash(user.password)
-    db_user = models.User(
-        username=user.username,
-        email=user.email,
-        hashed_password=hashed_password,
-        is_active=user.is_active,
-        is_admin=user.is_admin
-    )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
-
+# Функция для проверки пароля
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
-def authenticate_user(db: Session, username: str, password: str):
-    user = get_user_by_username(db, username)
-    if not user:
-        return False
-    if not verify_password(password, user.hashed_password):
-        return False
-    return user
+# Вспомогательная функция для получения соединения с БД
+def get_db():
+    db = models.SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 # Функции для работы с гостиницами
 def get_hotel(db: Session, hotel_id: int):
@@ -247,24 +221,23 @@ def get_cleaning_log(db: Session, log_id: int):
 def get_cleaning_logs(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.CleaningLog).offset(skip).limit(limit).all()
 
-def get_cleaning_logs_by_room(db: Session, room_id: int):
-    return db.query(models.CleaningLog).filter(models.CleaningLog.room_id == room_id).all()
-
 def get_cleaning_logs_by_employee(db: Session, employee_id: int):
     return db.query(models.CleaningLog).filter(models.CleaningLog.employee_id == employee_id).all()
 
 def get_cleaning_logs_by_date(db: Session, cleaning_date: date):
     return db.query(models.CleaningLog).filter(models.CleaningLog.cleaning_date == cleaning_date).all()
 
+def get_cleaning_logs_by_date_and_floor(db: Session, cleaning_date: date, floor_id: int):
+    return db.query(models.CleaningLog).filter(
+        models.CleaningLog.cleaning_date == cleaning_date,
+        models.CleaningLog.floor_id == floor_id
+    ).all()
+
 def create_cleaning_log(db: Session, log: schemas.CleaningLogCreate):
     db_log = models.CleaningLog(**log.dict())
     db.add(db_log)
     db.commit()
     db.refresh(db_log)
-    
-    # Меняем статус номера на "Уборка"
-    update_room_status(db, log.room_id, "Уборка")
-    
     return db_log
 
 def complete_cleaning(db: Session, log_id: int):
@@ -272,7 +245,7 @@ def complete_cleaning(db: Session, log_id: int):
     if not db_log:
         raise HTTPException(status_code=404, detail="Запись не найдена")
     
-    # Меняем статус номера обратно на "Свободен"
-    update_room_status(db, db_log.room_id, "Свободен")
-    
+    db_log.status = "Завершена"
+    db.commit()
+    db.refresh(db_log)
     return db_log 
