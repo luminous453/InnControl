@@ -124,7 +124,7 @@ export const dashboardService = {
           
           bookingsWithDetails.push({
             clientName: `${bookingDetails.client.last_name} ${bookingDetails.client.first_name.charAt(0)}.`,
-            roomNumber: bookingDetails.room.room_number,
+            roomNumber: `Номер ${bookingDetails.room.room_number}`,
             checkInDate: booking.check_in_date,
             checkOutDate: booking.check_out_date
           });
@@ -145,57 +145,65 @@ export const dashboardService = {
   // Получить сегодняшние уборки
   getTodayCleanings: async (limit = 5): Promise<RecentCleaning[]> => {
     try {
-      console.log(`Получение ${limit} уборок на сегодня...`);
+      // Получаем текущую дату в формате YYYY-MM-DD
+      const currentDate = new Date();
+      const today = currentDate.toISOString().split('T')[0];
+      console.log(`Получение ${limit} уборок на текущую дату (${today})...`);
       
-      // Получаем все записи журнала уборок
-      const cleaningLogs = await cleaningService.getAllCleaningLogs();
-      console.log(`Получено всего ${cleaningLogs.length} записей журнала уборок`);
+      // Определяем день недели для получения расписания уборок
+      const daysOfWeek = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+      const dayOfWeek = daysOfWeek[currentDate.getDay()];
       
-      if (!cleaningLogs || cleaningLogs.length === 0) {
-        console.log('Записи уборок не найдены, возвращаем пустой массив');
+      console.log(`Текущий день недели: ${dayOfWeek}`);
+      
+      try {
+        // Получаем расписание уборок для текущего дня недели
+        const schedules = await cleaningService.getCleaningSchedulesByDay(dayOfWeek);
+        console.log(`Получено ${schedules.length} расписаний на ${dayOfWeek}`);
+        
+        if (!schedules || schedules.length === 0) {
+          console.log(`Расписания уборок на ${dayOfWeek} не найдены`);
+          return [];
+        }
+        
+        // Получаем детали для каждого расписания
+        const cleaningsWithDetails: RecentCleaning[] = [];
+        
+        // Сортируем расписания по этажу (от нижнего к верхнему)
+        const sortedSchedules = [...schedules].sort((a, b) => a.floor - b.floor);
+        
+        // Ограничиваем количество расписаний
+        const limitedSchedules = sortedSchedules.slice(0, limit);
+        
+        for (const schedule of limitedSchedules) {
+          try {
+            // Получаем детали расписания
+            const scheduleDetails = await cleaningService.getCleaningSchedule(schedule.schedule_id);
+            
+            if (!scheduleDetails || !scheduleDetails.employee) {
+              console.log(`Пропускаем расписание ${schedule.schedule_id} из-за отсутствия данных`);
+              continue;
+            }
+            
+            // Добавляем информацию об уборке
+            cleaningsWithDetails.push({
+              roomNumber: `Этаж ${schedule.floor}`,
+              employeeName: `${scheduleDetails.employee.last_name} ${scheduleDetails.employee.first_name.charAt(0)}.`,
+              status: 'По расписанию'
+            });
+          } catch (err) {
+            console.error(`Ошибка при получении деталей расписания ${schedule.schedule_id}:`, err);
+          }
+        }
+        
+        console.log(`Подготовлено ${cleaningsWithDetails.length} уборок для отображения`);
+        return cleaningsWithDetails;
+      } catch (error) {
+        console.error(`Ошибка при получении расписаний на день ${dayOfWeek}:`, error);
         return [];
       }
-      
-      // Получаем текущую дату в формате YYYY-MM-DD
-      const today = new Date().toISOString().split('T')[0];
-      console.log(`Сегодняшняя дата: ${today}`);
-      
-      // Фильтруем уборки на сегодня
-      const todayCleanings = cleaningLogs.filter(log => 
-        log.cleaning_date === today
-      );
-      console.log(`Уборок на сегодня: ${todayCleanings.length}`);
-      
-      // Берём только последние n уборок
-      const recentCleanings = todayCleanings.slice(0, limit);
-      
-      // Получаем детали по каждой уборке
-      const cleaningsWithDetails: RecentCleaning[] = [];
-      
-      for (const log of recentCleanings) {
-        try {
-          console.log(`Получение деталей уборки ${log.log_id}...`);
-          const logDetails = await cleaningService.getCleaningLog(log.log_id);
-          
-          if (!logDetails || !logDetails.room || !logDetails.employee) {
-            console.log(`Пропускаем уборку ${log.log_id} из-за отсутствия данных`);
-            continue;
-          }
-          
-          cleaningsWithDetails.push({
-            roomNumber: logDetails.room.room_number,
-            employeeName: `${logDetails.employee.last_name} ${logDetails.employee.first_name.charAt(0)}.`,
-            status: log.status
-          });
-        } catch (err) {
-          console.error(`Ошибка при получении деталей уборки ${log.log_id}:`, err);
-        }
-      }
-      
-      console.log(`Подготовлено ${cleaningsWithDetails.length} уборок для отображения`);
-      return cleaningsWithDetails;
     } catch (error) {
-      console.error('Ошибка при получении уборок на сегодня:', error);
+      console.error('Общая ошибка при получении уборок на сегодня:', error);
       return []; // Возвращаем пустой массив вместо выброса исключения
     }
   }

@@ -122,7 +122,7 @@ class Employee(EmployeeBase):
 
 # Схемы для CleaningSchedule
 class CleaningScheduleBase(BaseModel):
-    employee_id: int
+    employee_id: Optional[int] = None
     floor: int
     day_of_week: str
 
@@ -146,7 +146,7 @@ class CleaningLogBase(BaseModel):
     room_id: int
     employee_id: int
     cleaning_date: date = Field(default_factory=date.today)
-    status: str = "Ожидает"
+    status: str = "Не начато"
 
 class CleaningLogCreate(CleaningLogBase):
     pass

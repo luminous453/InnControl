@@ -197,7 +197,19 @@ export default function BookingsPage() {
             newBooking.check_in_date,
             newBooking.check_out_date
           );
-          setAvailableRooms(rooms);
+          
+          // Получаем информацию о типах номеров для каждого номера
+          const roomsWithTypeDetails = await Promise.all(rooms.map(async (room) => {
+            try {
+              const roomDetails = await roomService.getRoom(room.room_id);
+              return roomDetails;
+            } catch (err) {
+              console.error(`Ошибка при получении деталей для номера ${room.room_id}:`, err);
+              return room;
+            }
+          }));
+          
+          setAvailableRooms(roomsWithTypeDetails);
         } catch (err) {
           console.error('Ошибка при проверке доступных номеров:', err);
           setAvailableRooms([]);
@@ -291,15 +303,18 @@ export default function BookingsPage() {
   };
   
   // Фильтрация бронирований
-  const filteredBookings = bookings.filter(booking => {
-    const matchesSearch = 
-      booking.room.room_number.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      `${booking.client.first_name} ${booking.client.last_name}`.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = filterStatus ? booking.status === filterStatus : true;
-    
-    return matchesSearch && matchesStatus;
-  });
+  const filteredBookings = bookings
+    .filter(booking => {
+      const matchesSearch = 
+        booking.room.room_number.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        `${booking.client.first_name} ${booking.client.last_name}`.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesStatus = filterStatus ? booking.status === filterStatus : true;
+      
+      return matchesSearch && matchesStatus;
+    })
+    // Сортировка по дате заселения (от ближайшей к более поздней)
+    .sort((a, b) => new Date(a.check_in_date).getTime() - new Date(b.check_in_date).getTime());
   
   // Получение уникальных статусов для фильтра
   const statuses = Array.from(new Set(bookings.map(booking => booking.status)));

@@ -55,6 +55,15 @@ app.add_middleware(
     max_age=600,  # Время кеширования предзапросов (в секундах)
 )
 
+# Специальный мидлвар для добавления CORS заголовков к каждому ответу
+@app.middleware("http")
+async def add_cors_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
+
 # Тестовый эндпоинт для проверки CORS
 @app.get("/api-test")
 def test_api():
@@ -471,8 +480,17 @@ def delete_employee(employee_id: int, db: Session = Depends(get_db)):
     if db_employee is None:
         raise HTTPException(status_code=404, detail="Сотрудник не найден")
     
-    # Проверяем, есть ли у сотрудника активные расписания уборок
-    # Здесь должна быть проверка, если она требуется
+    # Получаем все записи расписания уборок для сотрудника
+    cleaning_schedules = crud.get_cleaning_schedules_by_employee(db, employee_id=employee_id)
+    # Удаляем все записи расписания
+    for schedule in cleaning_schedules:
+        db.delete(schedule)
+    
+    # Получаем все записи журнала уборок для сотрудника
+    cleaning_logs = crud.get_cleaning_logs_by_employee(db, employee_id=employee_id)
+    # Удаляем все записи журнала
+    for log in cleaning_logs:
+        db.delete(log)
     
     # Удаляем сотрудника
     db.delete(db_employee)
@@ -482,7 +500,7 @@ def delete_employee(employee_id: int, db: Session = Depends(get_db)):
 # Эндпоинты для расписания уборок
 @app.get("/cleaning-schedules/", response_model=List[schemas.CleaningSchedule])
 def read_cleaning_schedules(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    schedules = crud.get_cleaning_schedules(db, skip=skip, limit=limit)
+    schedules = crud.get_cleaning_schedules_with_details(db, skip=skip, limit=limit)
     return schedules
 
 @app.get("/cleaning-schedules/{schedule_id}", response_model=schemas.CleaningScheduleWithDetails)
@@ -492,9 +510,35 @@ def read_cleaning_schedule(schedule_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Расписание не найдено")
     return db_schedule
 
+@app.delete("/cleaning-schedules/{schedule_id}", response_model=schemas.CleaningSchedule)
+def delete_cleaning_schedule(schedule_id: int, db: Session = Depends(get_db)):
+    db_schedule = crud.get_cleaning_schedule(db, schedule_id=schedule_id)
+    if db_schedule is None:
+        raise HTTPException(status_code=404, detail="Расписание не найдено")
+    
+    # Удаляем расписание
+    db.delete(db_schedule)
+    db.commit()
+    return db_schedule
+
 @app.post("/cleaning-schedules/", response_model=schemas.CleaningSchedule)
 def create_cleaning_schedule(schedule: schemas.CleaningScheduleCreate, db: Session = Depends(get_db)):
     return crud.create_cleaning_schedule(db=db, schedule=schedule)
+
+@app.put("/cleaning-schedules/{schedule_id}", response_model=schemas.CleaningSchedule)
+def update_cleaning_schedule(schedule_id: int, schedule: schemas.CleaningScheduleCreate, db: Session = Depends(get_db)):
+    db_schedule = crud.get_cleaning_schedule(db, schedule_id=schedule_id)
+    if db_schedule is None:
+        raise HTTPException(status_code=404, detail="Расписание не найдено")
+    
+    # Обновляем поля расписания
+    db_schedule.employee_id = schedule.employee_id
+    db_schedule.floor = schedule.floor
+    db_schedule.day_of_week = schedule.day_of_week
+    
+    db.commit()
+    db.refresh(db_schedule)
+    return db_schedule
 
 @app.get("/employees/{employee_id}/cleaning-schedules/", response_model=List[schemas.CleaningSchedule])
 def read_employee_cleaning_schedules(employee_id: int, db: Session = Depends(get_db)):
@@ -505,7 +549,7 @@ def read_employee_cleaning_schedules(employee_id: int, db: Session = Depends(get
 
 @app.get("/cleaning-schedules/day/{day}/", response_model=List[schemas.CleaningSchedule])
 def read_cleaning_schedules_by_day(day: str, db: Session = Depends(get_db)):
-    return crud.get_cleaning_schedules_by_day(db, day_of_week=day)
+    return crud.get_cleaning_schedules_by_day_with_details(db, day_of_week=day)
 
 # Эндпоинты для журнала уборок
 @app.get("/cleaning-logs/", response_model=List[schemas.CleaningLog])
@@ -522,6 +566,21 @@ def read_cleaning_log(log_id: int, db: Session = Depends(get_db)):
 
 @app.post("/cleaning-logs/", response_model=schemas.CleaningLog)
 def create_cleaning_log(log: schemas.CleaningLogCreate, db: Session = Depends(get_db)):
+    # Получаем информацию о номере, чтобы узнать этаж
+    room = crud.get_room(db, room_id=log.room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Номер не найден")
+    
+    # Проверяем, нет ли уже записей по этому этажу на эту дату
+    existing_logs = crud.get_cleaning_logs_by_date(db, cleaning_date=log.cleaning_date)
+    for existing_log in existing_logs:
+        existing_room = crud.get_room(db, room_id=existing_log.room_id)
+        if existing_room and existing_room.floor == room.floor:
+            raise HTTPException(
+                status_code=400, 
+                detail="На этот этаж уже назначен другой сотрудник в этот день"
+            )
+    
     return crud.create_cleaning_log(db=db, log=log)
 
 @app.put("/cleaning-logs/{log_id}", response_model=schemas.CleaningLog)

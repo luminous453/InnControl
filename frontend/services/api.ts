@@ -21,19 +21,7 @@ async function fetchApi<T>(
   };
 
   try {
-    console.log(`API запрос: ${method} ${API_URL}${endpoint}`, body ? JSON.stringify(body) : 'без тела');
-    
-    // Сначала пробуем выполнить тестовый запрос для проверки CORS
-    try {
-      const testResponse = await fetch(`${API_URL}/api-test`, { mode: 'cors' });
-      console.log('Тест CORS:', testResponse.ok ? 'успешно' : 'неудача', testResponse.status);
-      if (testResponse.ok) {
-        const testData = await testResponse.json();
-        console.log('Тестовый ответ:', testData);
-      }
-    } catch (testError) {
-      console.error('Ошибка при проверке CORS:', testError);
-    }
+    console.log(`API запрос: ${method} ${API_URL}${endpoint}`);
     
     // Основной запрос
     const response = await fetch(`${API_URL}${endpoint}`, config);

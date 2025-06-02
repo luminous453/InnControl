@@ -426,7 +426,7 @@ export default function EmployeesPage() {
                 Отмена
               </button>
               <button 
-                className="btn-danger"
+                className="btn-primary bg-red-600 hover:bg-red-700 focus:ring-red-500"
                 onClick={handleDeleteEmployee}
               >
                 Уволить

@@ -35,6 +35,7 @@ export default function RoomsPage() {
   });
   
   const [roomTypes, setRoomTypes] = useState<any[]>([]);
+  const [roomNumberError, setRoomNumberError] = useState<string | null>(null);
   
   // Получение данных о номерах
   useEffect(() => {
@@ -137,6 +138,12 @@ export default function RoomsPage() {
       
       if (!newRoom.room_number || !newRoom.floor || !newRoom.type_id) {
         setError('Заполните все обязательные поля');
+        return;
+      }
+      
+      // Проверка ошибки номера комнаты
+      if (roomNumberError) {
+        setError(roomNumberError);
         return;
       }
       
@@ -256,6 +263,24 @@ export default function RoomsPage() {
       console.error('Ошибка при удалении номера:', err);
       setError('Не удалось удалить номер. Возможно, он используется в бронированиях.');
       setShowDeleteModal(false);
+    }
+  };
+
+  // Функция для проверки уникальности номера комнаты
+  const checkRoomNumberUnique = (roomNumber: string) => {
+    if (!roomNumber) {
+      setRoomNumberError(null);
+      return;
+    }
+    
+    const exists = rooms.some(room => 
+      room.room_number.toLowerCase() === roomNumber.toLowerCase()
+    );
+    
+    if (exists) {
+      setRoomNumberError('Номер с таким номером уже существует. Пожалуйста, укажите другой номер комнаты.');
+    } else {
+      setRoomNumberError(null);
     }
   };
 
@@ -409,10 +434,17 @@ export default function RoomsPage() {
               <label className="label">Номер комнаты*</label>
               <input 
                 type="text" 
-                className="input w-full" 
+                className={`input w-full ${roomNumberError ? 'border-red-500' : ''}`}
                 value={newRoom.room_number}
-                onChange={(e) => setNewRoom({...newRoom, room_number: e.target.value})}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setNewRoom({...newRoom, room_number: value});
+                  checkRoomNumberUnique(value);
+                }}
               />
+              {roomNumberError && (
+                <p className="text-red-500 text-sm mt-1">{roomNumberError}</p>
+              )}
             </div>
             
             <div className="mb-4">
@@ -487,8 +519,27 @@ export default function RoomsPage() {
                 type="text" 
                 className="input w-full" 
                 value={currentRoom.room_number}
-                onChange={(e) => setCurrentRoom({...currentRoom, room_number: e.target.value})}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setCurrentRoom({...currentRoom, room_number: value});
+                  // Проверяем уникальность, только если номер изменился
+                  if (value !== currentRoom.room_number) {
+                    const exists = rooms.some(room => 
+                      room.room_number.toLowerCase() === value.toLowerCase() && 
+                      room.room_id !== currentRoom.room_id
+                    );
+                    
+                    if (exists) {
+                      setRoomNumberError('Номер с таким номером уже существует. Пожалуйста, укажите другой номер комнаты.');
+                    } else {
+                      setRoomNumberError(null);
+                    }
+                  }
+                }}
               />
+              {roomNumberError && (
+                <p className="text-red-500 text-sm mt-1">{roomNumberError}</p>
+              )}
             </div>
             
             <div className="mb-4">
@@ -580,7 +631,7 @@ export default function RoomsPage() {
                 Отмена
               </button>
               <button 
-                className="btn-danger"
+                className="bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded"
                 onClick={handleDeleteRoom}
               >
                 Удалить

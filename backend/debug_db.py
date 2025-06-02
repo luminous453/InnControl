@@ -74,33 +74,17 @@ def check_bookings():
         db.close()
 
 def mock_bookings_response(limit=5):
-    """Создаёт мок-ответ с бронированиями без доступа к БД"""
-    from datetime import date, timedelta
-    
-    today = date.today()
-    
-    # Создаем тестовые данные
-    mock_data = []
-    for i in range(1, limit + 1):
-        mock_data.append({
-            "booking_id": i,
-            "room_id": 100 + i,
-            "client_id": i,
-            "check_in_date": (today + timedelta(days=i*7)).isoformat(),
-            "check_out_date": (today + timedelta(days=i*7+3)).isoformat(),
-            "status": "Подтверждено"
-        })
-    
-    return mock_data
+    """Эта функция больше не создаёт мок-данные"""
+    return []
 
 def fix_bookings_endpoint():
     """Создаёт файл с исправленным эндпоинтом для бронирований"""
-    code = """# Безопасный эндпоинт для бронирований с мок-данными
+    code = """# Безопасный эндпоинт для бронирований
 @app.get("/bookings/", response_model=List[schemas.Booking])
 def read_bookings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     try:
         logger.info(f"Запрос бронирований: skip={skip}, limit={limit}")
-        # Сначала пробуем получить реальные данные
+        # Получаем реальные данные
         try:
             bookings = crud.get_bookings(db, skip=skip, limit=limit)
             logger.info(f"Найдено {len(bookings)} бронирований")
@@ -108,25 +92,7 @@ def read_bookings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
         except Exception as e:
             logger.error(f"Ошибка при получении бронирований из БД: {str(e)}")
             logger.error(traceback.format_exc())
-            
-            # Если не получилось, возвращаем тестовые данные
-            from datetime import date, timedelta
-            today = date.today()
-            
-            mock_data = []
-            for i in range(1, 5):
-                booking = models.Booking(
-                    booking_id=i,
-                    room_id=100 + i,
-                    client_id=i,
-                    check_in_date=today + timedelta(days=i*7),
-                    check_out_date=today + timedelta(days=i*7+3),
-                    status="Подтверждено"
-                )
-                mock_data.append(booking)
-            
-            logger.info(f"Возвращаем {len(mock_data)} тестовых бронирований")
-            return mock_data
+            return []
     except Exception as e:
         logger.error(f"Критическая ошибка в эндпоинте бронирований: {str(e)}")
         logger.error(traceback.format_exc())
@@ -145,10 +111,7 @@ if __name__ == "__main__":
         check_tables()
         check_bookings()
     
-    print("\nСоздание тестовых данных для отладки...")
-    mock_data = mock_bookings_response()
-    print(f"Создано {len(mock_data)} тестовых бронирований")
-    
+    print("\nСоздание исправленного эндпоинта...")
     fix_bookings_endpoint()
     
     print("\nДиагностика завершена.") 

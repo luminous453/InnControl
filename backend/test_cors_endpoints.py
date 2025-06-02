@@ -32,10 +32,7 @@ def test_endpoint():
 
 @app.get("/bookings")
 def mock_bookings():
-    return [
-        {"booking_id": 1, "room_id": 101, "client_id": 1, "status": "Подтверждено"},
-        {"booking_id": 2, "room_id": 102, "client_id": 2, "status": "Отменено"}
-    ]
+    return []
 
 @app.options("/{full_path:path}")
 async def options_handler(request: Request, full_path: str):

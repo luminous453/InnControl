@@ -77,7 +77,7 @@ export const hotelService = {
         console.log(`Заполняемость: ${occupancyRate}%`);
         
         const result = {
-          totalRooms: hotel.total_rooms,
+          totalRooms: rooms.length,
           occupiedRooms,
           availableRooms,
           totalEmployees: employees.length,

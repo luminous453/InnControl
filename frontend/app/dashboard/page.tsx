@@ -232,7 +232,7 @@ export default function DashboardPage() {
               {recentBookings.map((booking, index) => (
                 <div key={index} className="flex justify-between p-2 bg-cream rounded">
                   <p>{booking.clientName}</p>
-                  <p>Номер {booking.roomNumber}</p>
+                  <p className="text-center">{booking.roomNumber}</p>
                   <p>{formatDate(booking.checkInDate)} - {formatDate(booking.checkOutDate)}</p>
                 </div>
               ))}
@@ -248,12 +248,13 @@ export default function DashboardPage() {
             <div className="space-y-3">
               {todayCleanings.map((cleaning, index) => (
                 <div key={index} className="flex justify-between p-2 bg-cream rounded">
-                  <p>Номер {cleaning.roomNumber}</p>
+                  <p>{cleaning.roomNumber}</p>
                   <p>{cleaning.employeeName}</p>
                   <p className={`
                     ${cleaning.status === 'Завершена' ? 'text-green-600' : ''}
                     ${cleaning.status === 'В процессе' ? 'text-yellow-600' : ''}
                     ${cleaning.status === 'Ожидает' ? 'text-gray-600' : ''}
+                    ${cleaning.status === 'По расписанию' ? 'text-blue-600' : ''}
                   `}>
                     {cleaning.status}
                   </p>

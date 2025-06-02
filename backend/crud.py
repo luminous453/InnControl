@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 import models, schemas
 from datetime import date, datetime
 from fastapi import HTTPException, status
@@ -211,11 +211,27 @@ def get_cleaning_schedule(db: Session, schedule_id: int):
 def get_cleaning_schedules(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.CleaningSchedule).offset(skip).limit(limit).all()
 
+def get_cleaning_schedules_with_details(db: Session, skip: int = 0, limit: int = 100):
+    schedules = db.query(models.CleaningSchedule).options(
+        joinedload(models.CleaningSchedule.employee)
+    ).offset(skip).limit(limit).all()
+    
+    # Фильтруем записи с None employee_id, чтобы избежать ошибок
+    return [schedule for schedule in schedules if schedule.employee_id is not None]
+
 def get_cleaning_schedules_by_employee(db: Session, employee_id: int):
     return db.query(models.CleaningSchedule).filter(models.CleaningSchedule.employee_id == employee_id).all()
 
 def get_cleaning_schedules_by_day(db: Session, day_of_week: str):
     return db.query(models.CleaningSchedule).filter(models.CleaningSchedule.day_of_week == day_of_week).all()
+
+def get_cleaning_schedules_by_day_with_details(db: Session, day_of_week: str):
+    schedules = db.query(models.CleaningSchedule).options(
+        joinedload(models.CleaningSchedule.employee)
+    ).filter(models.CleaningSchedule.day_of_week == day_of_week).all()
+    
+    # Фильтруем записи с None employee_id, чтобы избежать ошибок
+    return [schedule for schedule in schedules if schedule.employee_id is not None]
 
 def create_cleaning_schedule(db: Session, schedule: schemas.CleaningScheduleCreate):
     db_schedule = models.CleaningSchedule(**schedule.dict())

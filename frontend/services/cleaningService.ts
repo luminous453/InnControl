@@ -33,8 +33,6 @@ export interface CleaningLog {
   room_id: number;
   employee_id: number;
   cleaning_date: string;
-  start_time?: string;
-  end_time?: string;
   status: string;
 }
 
