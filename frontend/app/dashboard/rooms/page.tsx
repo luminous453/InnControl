@@ -106,7 +106,6 @@ export default function RoomsPage() {
     switch(status) {
       case 'Свободен': return 'bg-green-100 text-green-800';
       case 'Занят': return 'bg-red-100 text-red-800';
-      case 'Техобслуживание': return 'bg-gray-100 text-gray-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -359,16 +358,11 @@ export default function RoomsPage() {
                   <td className="px-6 py-4 whitespace-nowrap">{room.room_type.capacity} чел.</td>
                   <td className="px-6 py-4 whitespace-nowrap">{room.room_type.price_per_night} ₽</td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <select
-                      className="px-3 py-2 text-sm font-medium rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
-                      value={room.status}
-                      onChange={(e) => handleStatusChange(room.room_id, e.target.value)}
-                    >
-                      <option value="Свободен">Свободен</option>
-                      <option value="Занят">Занят</option>
-                      <option value="Уборка">Уборка</option>
-                      <option value="Техобслуживание">Техобслуживание</option>
-                    </select>
+                    <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                      room.status === 'Свободен' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}>
+                      {room.status}
+                    </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">
@@ -558,9 +552,9 @@ export default function RoomsPage() {
             <div className="mb-4">
               <label className="label">Статус</label>
               <div className="p-3 bg-gray-50 rounded border border-gray-200">
-                <p className="text-sm text-gray-600">Текущий статус: <span className={`font-medium ${currentRoom.status === 'Свободен' ? 'text-green-600' : currentRoom.status === 'Занят' ? 'text-red-600' : 'text-gray-600'}`}>{currentRoom.status}</span></p>
+                <p className="text-sm text-gray-600">Текущий статус: <span className={`font-medium ${currentRoom.status === 'Свободен' ? 'text-green-600' : 'text-red-600'}`}>{currentRoom.status}</span></p>
                 <p className="text-sm text-gray-600 mt-1">Статус номера обновляется автоматически на основе бронирований.</p>
-                <p className="text-sm text-gray-600 mt-1">Техобслуживание можно выставить через автоматизированную систему.</p>
+                <p className="text-sm text-gray-600 mt-1">Возможны только два статуса: "Свободен" и "Занят".</p>
               </div>
             </div>
             

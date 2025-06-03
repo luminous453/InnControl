@@ -5,6 +5,7 @@ import { FaBed, FaCalendarAlt, FaUsers, FaUserTie, FaChartLine, FaPercent } from
 import { dashboardService } from '@/services/dashboardService';
 import { DashboardStats, RecentBooking, RecentCleaning } from '@/services/dashboardService';
 import { hotelService } from '@/services/hotelService';
+import { roomService } from '@/services/roomService';
 
 export default function DashboardPage() {
   const [statsData, setStatsData] = useState<DashboardStats>({
@@ -30,14 +31,16 @@ export default function DashboardPage() {
         setLoading(true);
         setError(null);
         
-        // Добавляем больше проверок и логирования
-        console.log('Начинаем загрузку данных панели управления...');
-        
+        // Сначала обновляем статусы всех номеров
         try {
+          await roomService.updateAllRoomStatuses();
+        } catch (statusError) {
+          console.error('Ошибка при обновлении статусов номеров:', statusError);
+          // Продолжаем работу даже при ошибке обновления статусов
+        }
+        
           // Сначала получаем список всех гостиниц
-          console.log('Загрузка списка гостиниц...');
           const hotels = await hotelService.getAllHotels();
-          console.log('Получены гостиницы:', hotels);
           
           // Если нет гостиниц, показываем ошибку
           if (!hotels || hotels.length === 0) {
@@ -48,13 +51,10 @@ export default function DashboardPage() {
           
           // Берем ID первой гостиницы в списке
           const hotelId = hotels[0].hotel_id;
-          console.log(`Используем гостиницу с ID=${hotelId}`);
           
           // Загружаем статистику
-          console.log('Загрузка статистики...');
           try {
             const stats = await dashboardService.getDashboardStats(hotelId);
-            console.log('Получена статистика:', stats);
             setStatsData(stats);
           } catch (statsError) {
             console.error('Ошибка при загрузке статистики:', statsError);
@@ -62,10 +62,8 @@ export default function DashboardPage() {
           }
           
           // Загружаем последние бронирования
-          console.log('Загрузка последних бронирований...');
           try {
             const bookings = await dashboardService.getRecentBookings();
-            console.log('Получены бронирования:', bookings);
             setRecentBookings(bookings);
           } catch (bookingsError) {
             console.error('Ошибка при загрузке бронирований:', bookingsError);
@@ -73,10 +71,8 @@ export default function DashboardPage() {
           }
           
           // Загружаем уборки на сегодня
-          console.log('Загрузка уборок на сегодня...');
           try {
             const cleanings = await dashboardService.getTodayCleanings();
-            console.log('Получены уборки:', cleanings);
             setTodayCleanings(cleanings);
           } catch (cleaningsError) {
             console.error('Ошибка при загрузке уборок:', cleaningsError);
@@ -84,7 +80,7 @@ export default function DashboardPage() {
           }
           
         } catch (err) {
-          console.error('Общая ошибка при загрузке данных:', err);
+        console.error('Ошибка при загрузке данных панели управления:', err);
           if (err instanceof Error) {
             if (err.message.includes('Failed to fetch')) {
               setError('Не удалось подключиться к API серверу. Пожалуйста, убедитесь, что бэкенд запущен.');
@@ -93,16 +89,6 @@ export default function DashboardPage() {
             }
           } else {
             setError('Ошибка при загрузке данных. Пожалуйста, проверьте работу сервера API и подключение к базе данных.');
-          }
-        }
-      } catch (err) {
-        console.error('Критическая ошибка при загрузке данных:', err);
-        
-        // Показываем пользователю детали ошибки
-        if (err instanceof Error) {
-          setError(`Не удалось загрузить данные: ${err.message}`);
-        } else {
-          setError('Не удалось загрузить данные. Пожалуйста, проверьте подключение к базе данных и запуск сервера API.');
         }
       } finally {
         setLoading(false);

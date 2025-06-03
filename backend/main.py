@@ -9,8 +9,7 @@ import uvicorn
 import logging
 import traceback
 from datetime import date, timedelta, datetime
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-import auth
+from fastapi.security import OAuth2PasswordRequestForm
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -141,19 +140,10 @@ def update_room(room_id: int, room: schemas.RoomCreate, db: Session = Depends(ge
     db_room.type_id = room.type_id
     db_room.floor = room.floor
     db_room.room_number = room.room_number
-    db_room.status = room.status
     
-    db.commit()
-    db.refresh(db_room)
-    return db_room
-
-@app.put("/rooms/{room_id}/status", response_model=schemas.Room)
-def update_room_status_endpoint(room_id: int, status: schemas.RoomStatusUpdate, db: Session = Depends(get_db)):
-    db_room = crud.get_room(db, room_id=room_id)
-    if db_room is None:
-        raise HTTPException(status_code=404, detail="Номер не найден")
+    # Сохраняем текущий статус, он должен меняться только автоматически
+    # в зависимости от бронирований
     
-    db_room.status = status.status
     db.commit()
     db.refresh(db_room)
     return db_room
@@ -340,16 +330,14 @@ def update_booking(booking_id: int, booking: schemas.BookingCreate, db: Session 
     if db_booking is None:
         raise HTTPException(status_code=404, detail="Бронирование не найдено")
     
-    # Проверяем, доступен ли номер в новые даты (если они изменились)
-    if (db_booking.check_in_date != booking.check_in_date or 
-        db_booking.check_out_date != booking.check_out_date or
-        db_booking.room_id != booking.room_id):
-        # Проверяем конфликты с другими бронированиями
+    # Проверяем, не конфликтует ли новое бронирование с существующими
+    if booking.room_id != db_booking.room_id or booking.check_in_date != db_booking.check_in_date or booking.check_out_date != db_booking.check_out_date:
         conflicts = db.query(models.Booking).filter(
             models.Booking.room_id == booking.room_id,
             models.Booking.booking_id != booking_id,
             models.Booking.check_in_date <= booking.check_out_date,
-            models.Booking.check_out_date >= booking.check_in_date
+            models.Booking.check_out_date >= booking.check_in_date,
+            models.Booking.status.notin_(["Отменено", "Выселен"])
         ).first()
         
         if conflicts:
@@ -357,6 +345,9 @@ def update_booking(booking_id: int, booking: schemas.BookingCreate, db: Session 
                 status_code=400,
                 detail="Номер уже забронирован на указанные даты"
             )
+    
+    # Сохраняем старый ID номера для обновления статуса
+    old_room_id = db_booking.room_id
     
     # Обновляем поля бронирования
     db_booking.room_id = booking.room_id
@@ -367,6 +358,14 @@ def update_booking(booking_id: int, booking: schemas.BookingCreate, db: Session 
     
     db.commit()
     db.refresh(db_booking)
+    
+    # Если изменился номер, обновляем статусы обоих номеров
+    if old_room_id != booking.room_id:
+        crud.update_room_status_based_on_bookings(db, old_room_id)
+    
+    # Обновляем статус нового/текущего номера
+    crud.update_room_status_based_on_bookings(db, booking.room_id)
+    
     return db_booking
 
 @app.put("/bookings/{booking_id}/status", response_model=schemas.Booking)
@@ -375,9 +374,14 @@ def update_booking_status(booking_id: int, status: schemas.BookingStatusUpdate, 
     if db_booking is None:
         raise HTTPException(status_code=404, detail="Бронирование не найдено")
     
+    # Обновляем статус бронирования
     db_booking.status = status.status
     db.commit()
     db.refresh(db_booking)
+    
+    # Обновляем статус номера в зависимости от статуса бронирования и текущей даты
+    crud.update_room_status_based_on_bookings(db, db_booking.room_id)
+    
     return db_booking
 
 @app.delete("/bookings/{booking_id}", response_model=schemas.Booking)
@@ -386,23 +390,14 @@ def delete_booking(booking_id: int, db: Session = Depends(get_db)):
     if db_booking is None:
         raise HTTPException(status_code=404, detail="Бронирование не найдено")
     
+    room_id = db_booking.room_id
+    
     # Удаляем бронирование
     db.delete(db_booking)
     db.commit()
     
-    # Если номер был занят этим бронированием, обновляем его статус
-    room = crud.get_room(db, room_id=db_booking.room_id)
-    if room and room.status == "Занят":
-        # Проверяем, есть ли другие активные бронирования для этого номера
-        other_bookings = db.query(models.Booking).filter(
-            models.Booking.room_id == db_booking.room_id,
-            models.Booking.booking_id != booking_id,
-            models.Booking.status.in_(["Активно", "Подтверждено"])
-        ).first()
-        
-        if not other_bookings:
-            room.status = "Свободен"
-            db.commit()
+    # Обновляем статус номера после удаления бронирования
+    crud.update_room_status_based_on_bookings(db, room_id)
     
     return db_booking
 
@@ -645,33 +640,43 @@ def read_cleaning_logs_by_date(date: str, db: Session = Depends(get_db)):
 def complete_cleaning_log(log_id: int, db: Session = Depends(get_db)):
     return crud.complete_cleaning(db, log_id=log_id)
 
-# Эндпоинт для авторизации и получения JWT токена
+# Простой эндпоинт для авторизации
 @app.post("/token")
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    # Хардкодированная проверка для admin/admin
-    if form_data.username == "admin" and form_data.password == "admin":
-        # Создаем данные для токена
-        access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
-        access_token = auth.create_access_token(
-            data={"sub": form_data.username}, expires_delta=access_token_expires
-        )
-        return {"access_token": access_token, "token_type": "bearer"}
+    # Получаем пользователя из базы данных
+    user = db.query(models.User).filter(models.User.username == form_data.username).first()
     
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Неверное имя пользователя или пароль",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+    # Проверяем, что пользователь существует и пароль верный
+    if not user or not crud.verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неверное имя пользователя или пароль"
+        )
+    
+    # Создаем простой токен (не JWT)
+    access_token = f"{user.username}_{user.id}"
+    
+    return {"access_token": access_token, "token_type": "bearer"}
 
 # Эндпоинт для проверки текущего пользователя
 @app.get("/users/me", response_model=schemas.User)
-async def read_users_me(current_user: schemas.User = Depends(auth.get_current_active_user)):
-    return current_user
+async def read_users_me(db: Session = Depends(get_db)):
+    # Просто возвращаем фиксированного пользователя admin для совместимости
+    user = db.query(models.User).filter(models.User.username == "admin").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    return user
 
 # Простой эндпоинт для проверки работы API
 @app.get("/")
 def read_root():
-    return {"message": "Добро пожаловать в API системы управления гостиницей InnControl"}
+    return {"message": "Добро пожаловать в API системы управления гостиницей"}
+
+# Новый эндпоинт для автоматического обновления статусов номеров
+@app.post("/update-room-statuses/")
+def update_room_statuses(db: Session = Depends(get_db)):
+    updated_rooms = crud.update_all_room_statuses(db)
+    return {"updated_rooms_count": len(updated_rooms)}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) 

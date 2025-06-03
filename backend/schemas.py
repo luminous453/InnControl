@@ -16,7 +16,7 @@ class User(UserBase):
     id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class Token(BaseModel):
     access_token: str
@@ -37,7 +37,7 @@ class Hotel(HotelBase):
     hotel_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Схемы для типов номеров
 class RoomTypeBase(BaseModel):
@@ -52,7 +52,7 @@ class RoomType(RoomTypeBase):
     type_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Схемы для номеров
 class RoomBase(BaseModel):
@@ -69,7 +69,7 @@ class Room(RoomBase):
     room_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class RoomWithDetails(Room):
     hotel: Hotel
@@ -89,7 +89,7 @@ class Client(ClientBase):
     client_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Схемы для бронирований
 class BookingBase(BaseModel):
@@ -106,7 +106,7 @@ class Booking(BookingBase):
     booking_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class BookingWithDetails(Booking):
     room: Room
@@ -129,7 +129,7 @@ class Employee(EmployeeBase):
     employee_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class EmployeeStatusUpdate(BaseModel):
     status: str
@@ -147,7 +147,7 @@ class CleaningSchedule(CleaningScheduleBase):
     schedule_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class CleaningScheduleWithDetails(CleaningSchedule):
     employee: Employee
@@ -166,7 +166,7 @@ class CleaningLog(CleaningLogBase):
     log_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class CleaningLogWithDetails(CleaningLog):
     employee: Employee

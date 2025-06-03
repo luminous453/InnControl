@@ -311,13 +311,34 @@ export default function ReportsPage() {
 
   // Форматирование числа в денежный формат
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB' }).format(amount);
+    return new Intl.NumberFormat('ru-RU', { 
+      style: 'currency', 
+      currency: 'RUB',
+      minimumFractionDigits: 0
+    }).format(amount);
   };
 
   // Форматирование даты
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('ru-RU');
+    return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
+  // Функция для экспорта в PDF
+  const handlePrintReport = () => {
+    // Используем встроенный API браузера для печати
+    window.print();
+  };
+  
+  const getCurrentDateString = () => {
+    const now = new Date();
+    return now.toLocaleDateString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   return (

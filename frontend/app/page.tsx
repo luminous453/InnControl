@@ -18,15 +18,32 @@ export default function LoginPage() {
     setLoading(true);
     
     try {
-      // В реальном проекте здесь должна быть интеграция с API
-      // Для примера сделаем простую проверку
-      if (username === 'admin' && password === 'admin') {
-        router.push('/dashboard');
-      } else {
-        setError('Неверное имя пользователя или пароль');
+      // Отправляем запрос на сервер для получения токена
+      const response = await fetch('http://localhost:8000/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({
+          username,
+          password
+        }).toString()
+      });
+      
+      if (!response.ok) {
+        throw new Error('Ошибка авторизации');
       }
+      
+      const data = await response.json();
+      
+      // Сохраняем токен в localStorage
+      localStorage.setItem('accessToken', data.access_token);
+      
+      // Редирект на панель администратора
+      router.push('/dashboard');
     } catch (err) {
-      setError('Ошибка авторизации. Попробуйте позже.');
+      console.error('Ошибка входа:', err);
+      setError('Неверное имя пользователя или пароль');
     } finally {
       setLoading(false);
     }
@@ -98,7 +115,7 @@ export default function LoginPage() {
             </div>
             
             <div className="text-center text-sm text-gray-600">
-              <p>Для демо-версии используйте:</p>
+              <p>По умолчанию используйте:</p>
               <p>Логин: admin / Пароль: admin</p>
             </div>
           </form>

@@ -11,6 +11,10 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
+# Функция для хеширования пароля
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
 # Вспомогательная функция для получения соединения с БД
 def get_db():
     db = models.SessionLocal()
@@ -142,11 +146,70 @@ def create_booking(db: Session, booking: schemas.BookingCreate):
     db.commit()
     db.refresh(db_booking)
     
-    # Обновляем статус номера если бронирование активно
-    if booking.status in ["Активно", "Подтверждено", "Заселен"]:
-        update_room_status(db, booking.room_id, "Занят")
+    # Обновляем статус номера в зависимости от дат бронирования
+    update_room_status_based_on_bookings(db, booking.room_id)
     
     return db_booking
+
+# Функция для автоматического обновления статуса номера на основе бронирований
+def update_room_status_based_on_bookings(db: Session, room_id: int):
+    # Получаем номер
+    room = get_room(db, room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Номер не найден")
+    
+    # Получаем текущую дату
+    today = date.today()
+    
+    # Проверяем, есть ли активные бронирования на текущую дату
+    active_booking = db.query(models.Booking).filter(
+        models.Booking.room_id == room_id,
+        models.Booking.check_in_date <= today,
+        models.Booking.check_out_date >= today,
+        models.Booking.status.notin_(["Отменено", "Выселен"])
+    ).first()
+    
+    # Устанавливаем статус в зависимости от наличия активного бронирования
+    new_status = "Занят" if active_booking else "Свободен"
+    
+    # Если статус изменился, обновляем его
+    if room.status != new_status:
+        room.status = new_status
+        db.commit()
+        db.refresh(room)
+    
+    return room
+
+# Функция для обновления статусов всех номеров
+def update_all_room_statuses(db: Session):
+    # Получаем все номера
+    rooms = get_rooms(db)
+    
+    updated_rooms = []
+    
+    # Получаем текущую дату
+    today = date.today()
+    
+    for room in rooms:
+        # Проверяем, есть ли активные бронирования на текущую дату
+        active_booking = db.query(models.Booking).filter(
+            models.Booking.room_id == room.room_id,
+            models.Booking.check_in_date <= today,
+            models.Booking.check_out_date >= today,
+            models.Booking.status.notin_(["Отменено", "Выселен"])
+        ).first()
+        
+        # Устанавливаем статус в зависимости от наличия активного бронирования
+        new_status = "Занят" if active_booking else "Свободен"
+        
+        # Если статус изменился, обновляем его
+        if room.status != new_status:
+            room.status = new_status
+            db.commit()
+            db.refresh(room)
+            updated_rooms.append(room)
+    
+    return updated_rooms
 
 # Функции для работы с сотрудниками
 def get_employee(db: Session, employee_id: int):
@@ -248,4 +311,29 @@ def complete_cleaning(db: Session, log_id: int):
     db_log.status = "Завершена"
     db.commit()
     db.refresh(db_log)
-    return db_log 
+    return db_log
+
+# Функции для работы с пользователями
+def get_user(db: Session, user_id: int):
+    return db.query(models.User).filter(models.User.id == user_id).first()
+
+def get_user_by_username(db: Session, username: str):
+    return db.query(models.User).filter(models.User.username == username).first()
+
+def get_users(db: Session, skip: int = 0, limit: int = 100):
+    return db.query(models.User).offset(skip).limit(limit).all()
+
+def create_user(db: Session, user: schemas.UserCreate):
+    hashed_password = get_password_hash(user.password)
+    db_user = models.User(
+        username=user.username,
+        email=user.email,
+        hashed_password=hashed_password,
+        is_active=user.is_active,
+        is_admin=user.is_admin,
+        hotel_id=user.hotel_id
+    )
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user 

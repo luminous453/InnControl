@@ -1,93 +1,3 @@
-import sqlite3
-import os
-
-# Путь к файлу базы данных
-DB_FILE = "hotel.db"
-
-def migrate_cleaning_logs():
-    """Мигрирует таблицу cleaning_logs, удаляя поля start_time и end_time"""
-    print("Миграция таблицы cleaning_logs...")
-    
-    # Проверяем, существует ли файл базы данных
-    if not os.path.exists(DB_FILE):
-        print(f"Ошибка: файл базы данных {DB_FILE} не найден.")
-        return
-    
-    try:
-        # Подключаемся к базе данных
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        
-        # Проверяем наличие столбцов start_time и end_time
-        cursor.execute("PRAGMA table_info(cleaning_logs)")
-        columns = [col[1] for col in cursor.fetchall()]
-        
-        if 'start_time' in columns or 'end_time' in columns:
-            # Начинаем транзакцию
-            conn.execute("BEGIN TRANSACTION")
-            
-            # 1. Создаем временную таблицу без полей start_time и end_time
-            cursor.execute("""
-            CREATE TABLE cleaning_logs_temp (
-                log_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                room_id INTEGER NOT NULL,
-                employee_id INTEGER NOT NULL,
-                cleaning_date DATE NOT NULL,
-                status VARCHAR(50) NOT NULL DEFAULT 'Не начато',
-                FOREIGN KEY (room_id) REFERENCES rooms (room_id),
-                FOREIGN KEY (employee_id) REFERENCES employees (employee_id)
-            )
-            """)
-            
-            # 2. Копируем данные из старой таблицы во временную
-            cursor.execute("""
-            INSERT INTO cleaning_logs_temp (log_id, room_id, employee_id, cleaning_date, status)
-            SELECT 
-                log_id, 
-                room_id, 
-                employee_id, 
-                cleaning_date,
-                CASE 
-                    WHEN status IN ('Ожидает', 'В процессе') THEN 'Не начато'
-                    WHEN status IN ('Завершена', 'Пропущена') THEN 'Завершена'
-                    ELSE 'Не начато'
-                END
-            FROM cleaning_logs
-            """)
-            
-            # 3. Удаляем старую таблицу
-            cursor.execute("DROP TABLE cleaning_logs")
-            
-            # 4. Переименовываем временную таблицу
-            cursor.execute("ALTER TABLE cleaning_logs_temp RENAME TO cleaning_logs")
-            
-            # Применяем изменения
-            conn.commit()
-            print("Таблица cleaning_logs успешно мигрирована.")
-        else:
-            print("Таблица cleaning_logs уже мигрирована.")
-        
-        # Получаем количество записей по статусам
-        cursor.execute("SELECT status, COUNT(*) FROM cleaning_logs GROUP BY status")
-        status_counts = cursor.fetchall()
-        
-        print("\nСтатистика статусов уборки:")
-        for status, count in status_counts:
-            print(f"  {status}: {count} записей")
-            
-    except sqlite3.Error as e:
-        print(f"Ошибка SQLite: {e}")
-        # Откатываем изменения в случае ошибки
-        if conn:
-            conn.rollback()
-    finally:
-        # Закрываем соединение
-        if conn:
-            conn.close()
-
-# Выполняем миграцию при импорте этого модуля
-migrate_cleaning_logs()
-
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Float, Date, DateTime, Enum, Time
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -99,7 +9,6 @@ from datetime import date
 class RoomStatus(str, enum.Enum):
     AVAILABLE = "Свободен"
     OCCUPIED = "Занят"
-    MAINTENANCE = "Техобслуживание"
 
 # Перечисление для дней недели
 class Weekday(str, enum.Enum):
@@ -115,6 +24,21 @@ class Weekday(str, enum.Enum):
 class CleaningStatus(str, enum.Enum):
     NOT_STARTED = "Не начато"
     COMPLETED = "Завершена"
+
+# Модель пользователя
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), unique=True, index=True)
+    email = Column(String(100), unique=True, index=True, nullable=True)
+    hashed_password = Column(String(255))
+    is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)
+    hotel_id = Column(Integer, ForeignKey("hotels.hotel_id"), nullable=True)
+    
+    # Отношения
+    hotel = relationship("Hotel", backref="users")
 
 # Модель гостиницы
 class Hotel(Base):

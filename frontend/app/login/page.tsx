@@ -24,40 +24,29 @@ export default function LoginPage() {
       setIsLoading(true);
       setError('');
       
-      // Проверка хардкодированных учётных данных для админа
-      if (username === 'admin' && password === 'admin') {
-        // Создаем объект с данными пользователя для отправки на сервер
-        const userData = {
+      // Отправляем запрос на сервер для получения токена
+      const response = await fetch('http://localhost:8000/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({
           username,
           password
-        };
-        
-        // Отправляем запрос на сервер для получения JWT токена
-        const response = await fetch('http://localhost:8000/token', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-          },
-          body: new URLSearchParams({
-            username,
-            password
-          }).toString()
-        });
-        
-        if (!response.ok) {
-          throw new Error('Ошибка авторизации');
-        }
-        
-        const data = await response.json();
-        
-        // Сохраняем токен в localStorage
-        localStorage.setItem('token', data.access_token);
-        
-        // Редирект на панель администратора
-        router.push('/dashboard');
-      } else {
-        setError('Неверное имя пользователя или пароль');
+        }).toString()
+      });
+      
+      if (!response.ok) {
+        throw new Error('Ошибка авторизации');
       }
+      
+      const data = await response.json();
+      
+      // Сохраняем токен в localStorage
+      localStorage.setItem('accessToken', data.access_token);
+      
+      // Редирект на панель администратора
+      router.push('/dashboard');
     } catch (err) {
       console.error('Ошибка входа:', err);
       setError('Ошибка при попытке входа в систему');

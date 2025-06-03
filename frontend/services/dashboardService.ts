@@ -37,52 +37,32 @@ export const dashboardService = {
   // Получить статистику для главной страницы
   getDashboardStats: async (hotelId: number): Promise<DashboardStats> => {
     try {
-      console.log(`Получение статистики для гостиницы с ID=${hotelId}...`);
-      
       // Получаем базовую статистику по гостинице
-      try {
-        console.log('Начинаем запрос статистики гостиницы...');
-        const hotelStats = await hotelService.getHotelStatistics(hotelId);
-        console.log('Получена статистика гостиницы:', hotelStats);
-        
-        console.log('Начинаем запрос всех бронирований...');
-        // Получаем все бронирования
-        const bookings = await bookingService.getAllBookings();
-        console.log(`Получено ${bookings.length} бронирований`);
-        
-        // Получаем активные бронирования (со статусом "Подтверждено" или "Заселен")
-        const activeBookings = bookings.filter(
-          booking => booking.status === 'Подтверждено' || booking.status === 'Заселен'
-        );
-        console.log(`Из них активных: ${activeBookings.length}`);
-        
-        console.log('Начинаем запрос всех клиентов...');
-        // Получаем всех клиентов
-        const clients = await clientService.getAllClients();
-        console.log(`Получено ${clients.length} клиентов`);
-        
-        // Фиксированное значение для среднего рейтинга (в будущем можно добавить функционал отзывов)
-        const averageRating = 4.7;
-        
-        const result = {
-          ...hotelStats,
-          totalBookings: activeBookings.length,
-          totalClients: clients.length,
-          averageRating
-        };
-        
-        console.log('Итоговая статистика для главной страницы:', result);
-        return result;
-      } catch (error) {
-        console.error('Ошибка при получении статистики гостиницы:', error);
-        if (error instanceof Error) {
-          console.error(`Детали ошибки: ${error.message}`);
-          console.error(`Стек вызовов: ${error.stack}`);
-        }
-        throw error;
-      }
+      const hotelStats = await hotelService.getHotelStatistics(hotelId);
+      
+      // Получаем все бронирования
+      const bookings = await bookingService.getAllBookings();
+      
+      // Получаем активные бронирования (со статусом "Подтверждено" или "Заселен")
+      const activeBookings = bookings.filter(
+        booking => booking.status === 'Подтверждено' || booking.status === 'Заселен'
+      );
+      
+      // Получаем всех клиентов
+      const clients = await clientService.getAllClients();
+      
+      // Рассчитываем средний рейтинг на основе данных бронирований
+      // (в будущем можно заменить на реальный расчет рейтинга)
+      const averageRating = 0;
+      
+      return {
+        ...hotelStats,
+        totalBookings: activeBookings.length,
+        totalClients: clients.length,
+        averageRating
+      };
     } catch (error) {
-      console.error('Ошибка при получении статистики для панели:', error);
+      console.error('Ошибка при получении статистики для панели управления:', error);
       throw error;
     }
   },
@@ -90,14 +70,10 @@ export const dashboardService = {
   // Получить последние бронирования
   getRecentBookings: async (limit = 5): Promise<RecentBooking[]> => {
     try {
-      console.log(`Получение последних ${limit} бронирований...`);
-      
       // Получаем все бронирования
       const bookings = await bookingService.getAllBookings();
-      console.log(`Получено всего ${bookings.length} бронирований`);
       
       if (!bookings || bookings.length === 0) {
-        console.log('Бронирования не найдены, возвращаем пустой массив');
         return [];
       }
       
@@ -114,11 +90,9 @@ export const dashboardService = {
       
       for (const booking of recentBookings) {
         try {
-          console.log(`Получение деталей бронирования ${booking.booking_id}...`);
           const bookingDetails = await bookingService.getBooking(booking.booking_id);
           
           if (!bookingDetails || !bookingDetails.client || !bookingDetails.room) {
-            console.log(`Пропускаем бронирование ${booking.booking_id} из-за отсутствия данных`);
             continue;
           }
           
@@ -133,9 +107,7 @@ export const dashboardService = {
         }
       }
       
-      console.log(`Подготовлено ${bookingsWithDetails.length} бронирований для отображения`);
       return bookingsWithDetails;
-      
     } catch (error) {
       console.error('Ошибка при получении последних бронирований:', error);
       return []; // Возвращаем пустой массив вместо выброса исключения
@@ -148,62 +120,43 @@ export const dashboardService = {
       // Получаем текущую дату в формате YYYY-MM-DD
       const currentDate = new Date();
       const today = currentDate.toISOString().split('T')[0];
-      console.log(`Получение ${limit} уборок на текущую дату (${today})...`);
       
-      // Определяем день недели для получения расписания уборок
-      const daysOfWeek = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
-      const dayOfWeek = daysOfWeek[currentDate.getDay()];
+      // Получаем список уборок на текущую дату
+      const cleaningLogs = await cleaningService.getCleaningLogsByDate(today);
       
-      console.log(`Текущий день недели: ${dayOfWeek}`);
-      
-      try {
-        // Получаем расписание уборок для текущего дня недели
-        const schedules = await cleaningService.getCleaningSchedulesByDay(dayOfWeek);
-        console.log(`Получено ${schedules.length} расписаний на ${dayOfWeek}`);
-        
-        if (!schedules || schedules.length === 0) {
-          console.log(`Расписания уборок на ${dayOfWeek} не найдены`);
-          return [];
-        }
-        
-        // Получаем детали для каждого расписания
-        const cleaningsWithDetails: RecentCleaning[] = [];
-        
-        // Сортируем расписания по этажу (от нижнего к верхнему)
-        const sortedSchedules = [...schedules].sort((a, b) => a.floor - b.floor);
-        
-        // Ограничиваем количество расписаний
-        const limitedSchedules = sortedSchedules.slice(0, limit);
-        
-        for (const schedule of limitedSchedules) {
-          try {
-            // Получаем детали расписания
-            const scheduleDetails = await cleaningService.getCleaningSchedule(schedule.schedule_id);
-            
-            if (!scheduleDetails || !scheduleDetails.employee) {
-              console.log(`Пропускаем расписание ${schedule.schedule_id} из-за отсутствия данных`);
-              continue;
-            }
-            
-            // Добавляем информацию об уборке
-            cleaningsWithDetails.push({
-              roomNumber: `Этаж ${schedule.floor}`,
-              employeeName: `${scheduleDetails.employee.last_name} ${scheduleDetails.employee.first_name.charAt(0)}.`,
-              status: 'По расписанию'
-            });
-          } catch (err) {
-            console.error(`Ошибка при получении деталей расписания ${schedule.schedule_id}:`, err);
-          }
-        }
-        
-        console.log(`Подготовлено ${cleaningsWithDetails.length} уборок для отображения`);
-        return cleaningsWithDetails;
-      } catch (error) {
-        console.error(`Ошибка при получении расписаний на день ${dayOfWeek}:`, error);
+      if (!cleaningLogs || cleaningLogs.length === 0) {
         return [];
       }
+      
+      // Получаем детали для каждой уборки
+      const cleaningsWithDetails: RecentCleaning[] = [];
+      
+      // Ограничиваем количество уборок
+      const limitedCleanings = cleaningLogs.slice(0, limit);
+      
+      for (const cleaning of limitedCleanings) {
+        try {
+          // Получаем детали уборки
+          const cleaningDetails = await cleaningService.getCleaningLog(cleaning.log_id);
+          
+          if (!cleaningDetails || !cleaningDetails.employee) {
+            continue;
+          }
+          
+          // Добавляем информацию об уборке
+          cleaningsWithDetails.push({
+            roomNumber: `Этаж ${cleaning.floor_id}`,
+            employeeName: `${cleaningDetails.employee.last_name} ${cleaningDetails.employee.first_name.charAt(0)}.`,
+            status: cleaning.status
+          });
+        } catch (err) {
+          console.error(`Ошибка при получении деталей уборки ${cleaning.log_id}:`, err);
+        }
+      }
+      
+      return cleaningsWithDetails;
     } catch (error) {
-      console.error('Общая ошибка при получении уборок на сегодня:', error);
+      console.error('Ошибка при получении уборок на сегодня:', error);
       return []; // Возвращаем пустой массив вместо выброса исключения
     }
   }

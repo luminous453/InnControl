@@ -11,28 +11,62 @@
 ## Технологии
 
 ### Frontend
-- Next.js 14
+- Next.js 14.0.1
 - React 18
-- Tailwind CSS
-- TypeScript
-- React Icons для иконок
-- Модульный API сервис для взаимодействия с backend
+- TypeScript 5
+- Tailwind CSS 3.3.0
+- Axios 1.6.0
+- React Hook Form 7.48.2
+- React Datepicker 4.21.0
+- React Icons 4.11.0
+- date-fns 2.30.0
+- ESLint 8
 
 ### Backend
-- FastAPI
-- SQLAlchemy
-- PostgreSQL
-- Python 3.9+
-- JWT авторизация
+- FastAPI 0.104.0
+- Uvicorn 0.23.2
+- SQLAlchemy 2.0.22
+- Pydantic 2.4.2
+- Pydantic-settings 2.0.3
+- PostgreSQL (psycopg2-binary 2.9.9)
+- Passlib 1.7.4 для хеширования паролей
+- Python-jose 3.3.0 для работы с токенами
+- Python-dotenv 1.0.0 для работы с переменными окружения
+- Bcrypt 4.0.1 для шифрования
+- Python-multipart 0.0.6 для обработки форм
 
-## Особенности системы
+## Подключение к базе данных
 
-- Адаптивный пользовательский интерфейс
-- Модульная архитектура приложения
-- REST API с документацией (Swagger UI)
-- Управление состоянием с использованием React Hooks
-- Оптимизированные запросы к базе данных
-- Обработка ошибок и валидация данных
+Проект использует PostgreSQL в качестве основной базы данных. Подключение настраивается через переменные окружения:
+
+1. Создайте файл `.env` в директории `backend` со следующими параметрами:
+   ```
+   POSTGRES_USER=postgres
+   POSTGRES_PASSWORD=ваш_пароль
+   POSTGRES_SERVER=localhost
+   POSTGRES_PORT=5432
+   POSTGRES_DB=inncontrol
+   ```
+
+   Для автоматического создания файла .env с правильной кодировкой UTF-8 можно использовать скрипт:
+   ```bash
+   python backend/create_env.py
+   ```
+
+2. Настройка подключения происходит в файле `database.py`:
+   ```python
+   # Получаем данные для подключения из переменных окружения или используем значения по умолчанию
+   POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
+   POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
+   POSTGRES_SERVER = os.getenv("POSTGRES_SERVER", "localhost")
+   POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
+   POSTGRES_DB = os.getenv("POSTGRES_DB", "inncontrol")
+
+   # Строка подключения к базе данных
+   SQLALCHEMY_DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_SERVER}:{POSTGRES_PORT}/{POSTGRES_DB}"
+   ```
+
+3. Перед запуском приложения необходимо создать базу данных PostgreSQL с именем `inncontrol`.
 
 ## Установка и запуск
 
@@ -44,21 +78,24 @@
    cd InnControl
    ```
 
-2. Запустите backend
+2. Создайте базу данных PostgreSQL с именем `inncontrol`
+
+3. Запустите backend
    ```bash
    cd backend
    pip install -r requirements.txt
-   uvicorn main:app --reload
+   python create_env.py
+   python run_server.py
    ```
 
-3. Запустите frontend
+4. Запустите frontend
    ```bash
    cd frontend
    npm install
    npm run dev
    ```
 
-4. Откройте браузер и перейдите по адресу http://localhost:3000
+5. Откройте браузер и перейдите по адресу http://localhost:3000
 
 ### Подробная инструкция
 
@@ -85,13 +122,26 @@
    pip install -r requirements.txt
    ```
 
-4. Запустите сервер
+4. Создайте файл .env с настройками подключения к PostgreSQL
    ```bash
-   # Вариант 1: с помощью uvicorn
-   uvicorn main:app --reload
+   python create_env.py
+   ```
+   или вручную создайте файл .env со следующим содержимым:
+   ```
+   POSTGRES_USER=postgres
+   POSTGRES_PASSWORD=ваш_пароль
+   POSTGRES_SERVER=localhost
+   POSTGRES_PORT=5432
+   POSTGRES_DB=inncontrol
+   ```
+
+5. Запустите сервер
+   ```bash
+   # Запуск с инициализацией базы данных
+   python run_server.py
    
-   # Вариант 2: запуск через Python
-   python main.py
+   # Или просто запуск API без инициализации
+   uvicorn main:app --reload
    ```
    
    Backend API будет доступен по адресу http://localhost:8000
@@ -115,6 +165,24 @@
    ```
    
    Клиентское приложение будет доступно по адресу http://localhost:3000
+
+## Аутентификация
+
+В проекте используется простая аутентификация с хешированием паролей:
+
+1. Пароли хешируются с использованием библиотеки `passlib` и алгоритма `bcrypt`
+2. При входе пользователь получает простой токен доступа в формате `username_id`
+3. Токен добавляется в заголовок `Authorization` при запросах к API с префиксом `Bearer`
+
+Для входа в систему используйте:
+- Логин: `admin`
+- Пароль: `admin`
+
+## Инициализация базы данных
+
+При первом запуске через `run_server.py` автоматически создаются:
+- Гостиница "Маяк"
+- Пользователь `admin` с паролем `admin`
 
 ## Реализованные функции
 
@@ -156,51 +224,41 @@
 
 Основные эндпоинты API:
 
+- `/token` - получение токена доступа
+  - `POST /token` - аутентификация пользователя
+
 - `/employees/` - управление сотрудниками
   - `GET /employees/` - получение списка всех сотрудников
   - `POST /employees/` - добавление нового сотрудника
   - `GET /employees/{employee_id}` - получение информации о конкретном сотруднике
   - `PUT /employees/{employee_id}` - обновление данных сотрудника
-  - `PATCH /employees/{employee_id}/status` - изменение статуса сотрудника
+  - `PUT /employees/{employee_id}/status/` - изменение статуса сотрудника
   - `DELETE /employees/{employee_id}` - удаление сотрудника
 
 - `/clients/` - управление клиентами
   - `GET /clients/` - получение списка всех клиентов
   - `POST /clients/` - добавление нового клиента
   - `GET /clients/{client_id}` - получение информации о конкретном клиенте
+  - `PUT /clients/{client_id}` - обновление данных клиента
+  - `DELETE /clients/{client_id}` - удаление клиента
+  - `GET /clients/city/{city}` - получение клиентов по городу
 
 - `/rooms/` - управление номерами
   - `GET /rooms/` - получение списка всех номеров
   - `POST /rooms/` - добавление нового номера
   - `GET /rooms/{room_id}` - получение информации о конкретном номере
   - `PUT /rooms/{room_id}` - обновление данных номера
-  - `PATCH /rooms/{room_id}/status` - изменение статуса номера
-  - `GET /rooms/available` - получение списка доступных номеров
-  - `GET /rooms/types` - получение списка типов номеров
+  - `PUT /rooms/{room_id}/status` - изменение статуса номера
+  - `DELETE /rooms/{room_id}` - удаление номера
+  - `GET /available-rooms/` - получение списка доступных номеров
+  - `POST /update-room-statuses/` - автоматическое обновление статусов номеров
 
 - `/bookings/` - управление бронированиями
   - `GET /bookings/` - получение списка всех бронирований
   - `POST /bookings/` - создание нового бронирования
   - `GET /bookings/{booking_id}` - получение информации о конкретном бронировании
+  - `PUT /bookings/{booking_id}` - обновление данных бронирования
+  - `PUT /bookings/{booking_id}/status` - изменение статуса бронирования
+  - `DELETE /bookings/{booking_id}` - удаление бронирования
 
-- `/cleaning-schedules/` - управление расписанием уборок
-  - `GET /cleaning-schedules/` - получение расписания уборок
-
-- `/cleaning-logs/` - управление журналом уборок
-  - `GET /cleaning-logs/` - получение журнала уборок
-  - `POST /cleaning-logs/` - добавление новой записи в журнал
-
-Полный список эндпоинтов доступен в Swagger UI документации по адресу http://localhost:8000/docs
-
-Для входа в систему используйте:
-- Логин: `admin`
-- Пароль: `admin`
-
-## Функциональность
-
-- Управление номерным фондом (добавление, редактирование, просмотр номеров)
-- Управление бронированиями (создание, редактирование, отмена бронирований)
-- Управление клиентами (регистрация, поиск, просмотр истории)
-- Управление персоналом (добавление, увольнение, назначение обязанностей)
-- Управление уборками (расписание, журнал выполненных работ)
-- Формирование отчетов (заполняемость, доходность) 
+Полный список эндпоинтов доступен в Swagger UI документации по адресу http://localhost:8000/docs 

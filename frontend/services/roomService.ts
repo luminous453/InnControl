@@ -62,6 +62,11 @@ export const roomService = {
     return api.get<Room[]>(`/hotels/${hotelId}/rooms/`);
   },
   
+  // Функция для запуска автоматического обновления статусов всех номеров
+  updateAllRoomStatuses: () => {
+    return api.post<{updated_rooms_count: number}>('/update-room-statuses/', {});
+  },
+  
   // Получить типы номеров
   getAllRoomTypes: () => {
     return api.get<RoomType[]>('/room-types/');
