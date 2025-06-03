@@ -55,14 +55,6 @@ export default function LoginPage() {
         <div className="max-w-md text-white">
           <h1 className="text-4xl font-bold mb-6">InnControl</h1>
           <p className="text-xl mb-8">Система администрирования гостиниц</p>
-          <div className="flex items-center mb-6">
-            <div className="flex items-center">
-              <span className="text-yellow-300 text-2xl mr-2">★★★★</span>
-              <span className="text-yellow-300 text-2xl">★</span>
-              <span className="text-white font-bold ml-2">4.8</span>
-            </div>
-            <span className="ml-2 text-white text-sm">средний рейтинг системы</span>
-          </div>
           <p className="mb-4">InnControl предоставляет инструменты для эффективного управления:</p>
           <ul className="space-y-2 list-disc pl-5">
             <li>Бронирование и учет номеров</li>
