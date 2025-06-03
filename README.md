@@ -129,8 +129,7 @@ InnControl/
    ```bash
    cd backend
    pip install -r requirements.txt
-   python create_env.py
-   python run_server.py
+   uvicorn main:app --reload
    ```
 
 4. Запустите frontend
