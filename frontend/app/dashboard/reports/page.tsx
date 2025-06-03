@@ -172,10 +172,6 @@ export default function ReportsPage() {
         a[href="/"] {
           display: none !important;
         }
-        /* Перенос общего дохода на следующую страницу */
-        .print-page-break {
-          page-break-before: always !important;
-        }
       }
     `;
     
@@ -524,46 +520,6 @@ export default function ReportsPage() {
           <p className="mt-2">Для экспорта отчета в PDF нажмите кнопку "Экспорт отчета".</p>
         </div>
       </div>
-      
-      {/* Таблица специально для печати */}
-      {financialData.length > 0 && (
-        <div className="print-table-container hidden print-only print-page-break">
-          <table className="print-financial-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Клиент</th>
-                <th>Номер</th>
-                <th>Дата заезда</th>
-                <th>Дата выезда</th>
-                <th>Ночей</th>
-                <th>Цена за ночь</th>
-                <th>Сумма</th>
-              </tr>
-            </thead>
-            <tbody>
-              {financialData.map((booking) => (
-                <tr key={`print-${booking.booking_id}`}>
-                  <td>{booking.booking_id}</td>
-                  <td>{booking.client_name}</td>
-                  <td>{booking.room_number}</td>
-                  <td>{formatDate(booking.check_in_date)}</td>
-                  <td>{formatDate(booking.check_out_date)}</td>
-                  <td>{booking.nights}</td>
-                  <td>{formatCurrency(booking.price_per_night)}</td>
-                  <td>{formatCurrency(booking.total_amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr>
-                <td colSpan={7} style={{textAlign: 'right'}}><strong>Итого:</strong></td>
-                <td><strong>{formatCurrency(totalIncome)}</strong></td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
     </div>
   );
 } 
